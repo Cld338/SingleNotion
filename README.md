@@ -6,10 +6,11 @@
 - **단일 페이지 변환**: 긴 노션 페이지를 끊김 없는 한 장의 PDF로 변환
 - **맞춤형 옵션**: 노션 헤더(커버/아이콘), 제목, 페이지 속성(태그) 표시 여부 선택 가능
 - **비동기 처리**: 작업 큐를 통한 안정적인 다중 요청 처리
+- **리소스 최적화**: 브라우저 인스턴스 풀링을 통한 안정적인 메모리 관리
 
 ## 기술 스택
 - **Backend & Queue**: Node.js (Express), BullMQ, Redis
-- **Rendering**: Puppeteer (Headless Chrome)
+- **Rendering & Resource Management**: Puppeteer (Headless Chrome), generic-pool
 
 ## 퀵 스타트
 

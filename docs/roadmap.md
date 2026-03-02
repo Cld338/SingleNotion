@@ -1,8 +1,7 @@
 본 문서는 현재 진행 중인 작업과 향후 구현할 기능들을 포함합니다.
 
 ## 🏃 진행 중 (In Progress)
-[ ] 리소스 및 성능 관리 (PDF 처리)
-    - Puppeteer 브라우저 인스턴스 풀링(Pooling)을 통한 워커 리소스 사용량 최적화
+
 
 ## 📅 향후 계획 (To Do)
 
@@ -24,3 +23,4 @@
 [x] 비동기 작업 큐 고도화 (BullMQ 및 Redis 도입)
 [x] 아키텍처 및 책임 분리 (Separation of Concerns)
 [x] TDD 기반 회귀 테스트 환경 구축
+[x] Puppeteer 브라우저 인스턴스 풀링(Pooling)을 통한 워커 리소스 사용량 최적화
