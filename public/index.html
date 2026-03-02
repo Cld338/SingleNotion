@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Single Notion</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* 카드 외부 하단에 배치되는 사용법 스타일 */
+        .instructions {
+            margin-top: 24px;
+            padding: 16px 20px;
+            background-color: transparent;
+            border: 1px dashed #ccc;
+            border-radius: 8px;
+            color: #555;
+            font-size: 0.9em;
+            line-height: 1.6;
+            text-align: left;
+        }
+        .instructions h3 {
+            margin: 0 0 12px 0;
+            font-size: 1.05em;
+            color: #333;
+        }
+        .instructions ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 6px;
+        }
+        .instructions li:last-child {
+            margin-bottom: 0;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -14,20 +43,30 @@
         <div class="card">
             <form id="convertForm">
                 <div class="form-group">
-                    <label for="url">Target URL:</label>
+                    <label for="url">URL:</label>
                     <input type="text" id="url" name="url" placeholder="https://notion.site/..." required>
                 </div>
                 <div class="form-group">
-                    <label for="width">Width (px):</label>
+                    <label for="width">너비 (px):</label>
                     <input type="text" id="width" name="width" value="1080px">
                 </div>
                 <div class="form-group checkbox-group">
-                    <label class="option"><input type="checkbox" name="includeTitle" value="true"> <span>Include Title</span></label>
-                    <label class="option"><input type="checkbox" name="includeBanner" value="true"> <span>Include Banner</span></label>
-                    <label class="option"><input type="checkbox" name="includeTags" value="true"> <span>Include Tags</span></label>
+                    <label class="option"><input type="checkbox" name="includeTitle" value="true"> <span>제목 포함</span></label>
+                    <label class="option"><input type="checkbox" name="includeBanner" value="true"> <span>배너 포함</span></label>
+                    <label class="option"><input type="checkbox" name="includeTags" value="true"> <span>속성 포함</span></label>
                 </div>
-                <button type="submit" id="submitBtn" class="submit-btn">Convert to PDF</button>
+                <button type="submit" id="submitBtn" class="submit-btn">PDF로 변환</button>
             </form>
+        </div>
+
+        <div class="instructions">
+            <h3>💡 사용 방법</h3>
+            <ol>
+                <li>변환할 노션 페이지를 게시한 뒤 링크를 <strong>URL</strong>에 입력합니다.</li>
+                <li>출력할 PDF의 <strong>너비</strong>를 설정합니다. (기본값: 1080px)</li>
+                <li>제목, 배너, 태그 포함 여부를 필요에 따라 선택합니다.</li>
+                <li><strong>PDF로 변환</strong> 버튼을 클릭하고 다운로드가 완료될 때까지 기다립니다.</li>
+            </ol>
         </div>
 
         <div id="loadingOverlay" class="loading-overlay" style="display: none;">
@@ -49,25 +88,21 @@
             loadingOverlay.style.display = 'flex';
             loadingText.innerHTML = 'PDF 변환 대기열에 등록 중입니다...';
 
-            // 기존 코드 부분
             const formData = new FormData(this);
 
-            // 1. URL 전처리 로직 추가
             let rawUrl = formData.get('url').trim();
             try {
                 const urlObj = new URL(rawUrl);
-                // 쿼리 스트링(?, source=... 등) 제거
                 const cleanUrl = `${urlObj.origin}${urlObj.pathname}`;
                 rawUrl = cleanUrl;
             } catch (e) {
-                // URL 형식이 아예 아닐 경우 처리
                 alert('올바른 URL 형식이 아닙니다.');
                 resetUI();
                 return;
             }
 
             const data = {
-                url: rawUrl, // 깨끗해진 URL 전달
+                url: rawUrl, 
                 width: formData.get('width') || '1080px',
                 includeTitle: formData.get('includeTitle') === 'true',
                 includeBanner: formData.get('includeBanner') === 'true',
@@ -75,7 +110,6 @@
             };
 
             try {
-                // 1. 변환 요청 (Job 생성)
                 const response = await fetch('/convert-url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -88,16 +122,14 @@
                 const jobId = resData.jobId;
                 loadingText.innerHTML = '변환 진행 중입니다.<br>최대 2분 정도 소요될 수 있습니다...';
 
-                // 2. SSE를 이용한 상태 수신 (Polling 대체)
                 const eventSource = new EventSource(`/job-events/${jobId}`);
 
                 eventSource.onmessage = function(event) {
                     const statusData = JSON.parse(event.data);
 
                     if (statusData.status === 'completed') {
-                        eventSource.close(); // 작업 완료 시 연결 종료
+                        eventSource.close(); 
                         
-                        // 다운로드 트리거
                         const a = document.createElement('a');
                         a.href = statusData.result.downloadUrl;
                         a.download = statusData.result.fileName;
@@ -107,14 +139,14 @@
 
                         resetUI();
                     } else if (statusData.status === 'failed' || statusData.status === 'error') {
-                        eventSource.close(); // 작업 실패 시 연결 종료
+                        eventSource.close(); 
                         alert(`오류 발생: ${statusData.error || '변환 중 오류가 발생했습니다.'}`);
                         resetUI();
                     }
                 };
 
                 eventSource.onerror = function(err) {
-                    eventSource.close(); // 통신 에러 발생 시 연결 종료
+                    eventSource.close(); 
                     alert('서버와의 연결이 끊어졌습니다.');
                     resetUI();
                 };
