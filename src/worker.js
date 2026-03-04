@@ -1,4 +1,5 @@
 const { Worker } = require('bullmq');
+const { performance } = require('perf_hooks');
 const { connection } = require('./config/queue'); // 분리된 공통 설정 활용
 const pdfService = require('./services/pdfService');
 const storage = require('./utils/storage');
@@ -9,20 +10,28 @@ const worker = new Worker('pdf-conversion', async (job) => {
     const { targetUrl, options } = job.data;
     logger.info(`[Job ${job.id}] Start processing: ${targetUrl} (Attempt: ${job.attemptsMade + 1})`);
 
+    const startTime = performance.now(); // 변환 시작 시간 기록
+
     try {
         const pdfStream = await pdfService.generatePdf(targetUrl, options);
         const fileName = `notion-${job.id}-${Date.now()}.pdf`;
-        const downloadUrl = await storage.saveStream(fileName, pdfStream); // save -> saveStream 변경
+        const downloadUrl = await storage.saveStream(fileName, pdfStream);
 
-        logger.info(`[Job ${job.id}] Successfully completed`);
-        return { downloadUrl, fileName };
+        const endTime = performance.now(); // 변환 종료 시간 기록
+        const durationMs = endTime - startTime; // 소요 시간(밀리초) 계산
+        const durationSec = (durationMs / 1000).toFixed(2); // 초 단위로 변환 및 소수점 둘째 자리까지 표시
+
+        logger.info(`[Job ${job.id}] Successfully completed in ${durationSec} seconds`);
+        
+        // 클라이언트(SSE) 측으로 소요 시간 데이터를 함께 전달하기 위해 반환값에 추가
+        return { downloadUrl, fileName, duration: durationSec };
 
     } catch (error) {
         logger.error(`[Job ${job.id}] Failed attempt ${job.attemptsMade + 1}: ${error.message}`);
-        throw error; // 에러를 던져 BullMQ의 재시도(Retry) 로직 트리거
+        throw error;
     }
 }, {
-    connection, // 공유 Redis 커넥션 사용
+    connection,
     concurrency: parseInt(process.env.WORKER_CONCURRENCY || '2'),
     lockDuration: 60000, 
 });

@@ -53,7 +53,7 @@ class PdfService {
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
             await page.setViewport({ width: parseInt(width), height: 100 });
 
-            await page.goto(url, { waitUntil: 'networkidle0' });
+            await page.goto(url, { waitUntil: 'networkidle2' });
 
             // 노션 핵심 콘텐츠 래퍼 엘리먼트 렌더링 대기
             try {
@@ -99,6 +99,16 @@ class PdfService {
             });
 
             let hideStyles = '';
+            hideStyles += `.notion-scroller > div:nth-child(1) {padding-top: 0px !important;}`;
+            hideStyles += `
+                .notion-topbar, 
+                header, 
+                .notion-topbar-mobile, 
+                #notion-app > div > div.notion-cursor-listener > div:nth-child(1) { 
+                    display: none !important; 
+                }
+            `;
+
             
             if (!includeTitle) {
                 hideStyles += `h1, .notion-page-block:has(h1) { display: none !important; }`;
@@ -106,6 +116,7 @@ class PdfService {
 
             if (!includeBanner) {
                 hideStyles += `.notion-page-cover-wrapper, .notion-record-icon, .notion-page-controls { display: none !important; }`;
+                hideStyles += `.layout-full { display: none !important; }`;
             }
 
             if (!includeTags) {
@@ -157,7 +168,7 @@ class PdfService {
 
                 await new Promise((resolve) => {
                     let totalHeight = 0;
-                    const distance = 100;
+                    const distance = 500;
                     const timer = setInterval(() => {
                         const scrollHeight = document.body.scrollHeight;
                         window.scrollBy(0, distance);
@@ -166,7 +177,7 @@ class PdfService {
                             clearInterval(timer);
                             resolve();
                         }
-                    }, 50); 
+                    }, 10); 
                 });
 
                 const images = Array.from(document.querySelectorAll('img'));

@@ -29,6 +29,8 @@
   },
   "devDependencies": {
     "jest": "^29.7.0",
+    "jest-image-snapshot": "^6.5.1",
+    "pdf2pic": "^3.2.0",
     "supertest": "^6.3.3",
     "vitepress": "^1.6.4"
   }
