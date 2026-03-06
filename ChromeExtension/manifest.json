@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Single Notion PDF",
+  "version": "1.0",
+  "permissions": ["activeTab", "debugger", "downloads", "scripting"],
+  "host_permissions": ["https://*.notion.so/*", "https://*.notion.site/*"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

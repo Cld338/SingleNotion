@@ -53,7 +53,7 @@ class PdfService {
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
             await page.setViewport({ width: parseInt(width), height: 100 });
 
-            await page.goto(url, { waitUntil: 'networkidle2' });
+            await page.goto(url, { waitUntil: 'domcontentloaded' });
 
             // 노션 핵심 콘텐츠 래퍼 엘리먼트 렌더링 대기
             try {
@@ -120,7 +120,11 @@ class PdfService {
             }
 
             if (!includeTags) {
-                hideStyles += `[aria-label="페이지 속성"], .layout-content-with-divider:has([role="table"]) { display: none !important; }`;
+                hideStyles += `
+                    [aria-label="페이지 속성"], 
+                    [aria-label="Page properties"]
+                    .layout-content-with-divider:has([role="table"]) { display: none !important; }
+                `;
             }
 
             if (hideStyles.trim().length > 0) {
