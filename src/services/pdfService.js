@@ -30,8 +30,10 @@ class PdfService {
             });
 
             page.setDefaultNavigationTimeout(120000);
-            const { includeBanner, includeTitle, includeTags, includeDiscussion } = options;
-
+            const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight } = options;
+            
+            
+            logger.info(`Margin - Top: ${marginTop}, Bottom: ${marginBottom}, Left: ${marginLeft}, Right: ${marginRight}`);
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
             
             // 1. 초기 뷰포트를 충분히 넓게 설정하여 데스크톱 레이아웃 유도
@@ -41,7 +43,15 @@ class PdfService {
 
             // [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
             const dimensions = await page.evaluate(async (opts) => {
-                const { includeTitle, includeBanner, includeTags, includeDiscussion } = opts;
+                const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight } = opts;
+
+                // 상하좌우 패딩 값 설정 (기본값 0)
+                const padTop = Number(marginTop) || 0;
+                const padBottom = Number(marginBottom) || 0;
+                const padLeft = Number(marginLeft) || 0;
+                const padRight = Number(marginRight) || 0;
+
+
 
                 // A. 너비 자동 감지 (popup.js 로직)
                 const contentEl = document.querySelector('.notion-page-content');
@@ -127,7 +137,15 @@ class PdfService {
 
                     .layout { padding-bottom: 0px !important; --margin-width: 0px !important; }
 
-                    .layout-content { padding-left: 100px !important; padding-right: 100px !important; }
+                    .notion-app {
+                    padding-top: ${padTop}px !important;
+                        padding-bottom: ${padBottom}px !important;
+                    }
+
+                    .layout-content { 
+                        padding-left: ${padLeft}px !important; 
+                        padding-right: ${padRight}px !important;
+                    }
                 `;
 
                 if (!includeTitle) dynamicStyles += `h1, .notion-page-block:has(h1) { display: none !important; }`;
@@ -167,17 +185,24 @@ class PdfService {
                 
                 return {
                     height: Math.ceil(contentHeight) + 100,
-                    width: detectedWidth
+                    width: detectedWidth,
+                    padTop: padTop,
+                    padBottom: padBottom,
+                    padLeft: padLeft,
+                    padRight: padRight
                 };
-            }, { includeBanner, includeTitle, includeTags, includeDiscussion });
+            }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight });
 
             // 2. 계산된 높이와 너비로 뷰포트 최종 조정
-            await page.setViewport({ width: 2560, height: dimensions.height + 200 });
+            const finalHeight = Math.ceil(dimensions.height + 100);
+            const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
+            
+            await page.setViewport({ width: 2560, height: finalHeight });
 
             // 3. PDF 생성 (Extension의 Page.printToPDF 설정 반영)
             const pdfWebStream = await page.createPDFStream({
-                width: `${dimensions.width+200}px`,
-                height: `${dimensions.height}px`,
+                width: `${finalWidth}px`,
+                height: `${finalHeight}px`,
                 printBackground: true,
                 displayHeaderFooter: false,
                 margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
