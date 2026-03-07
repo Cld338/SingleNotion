@@ -19,6 +19,7 @@ class PdfService {
                 if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://') && !reqUrl.startsWith('data:')) {
                     return request.abort();
                 }
+
                 if (isMainFrame) {
                     const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(reqUrl);
                     if (!isNotionDomain) return request.abort();
@@ -90,12 +91,16 @@ class PdfService {
                 });
 
                 // D. Extension 기반 스타일 주입 (감지된 너비 사용)
+                const padTopIdx = includeBanner ? 1 : (includeTags ? 2 : 3); // 배너 포함 시 첫 번째 레이아웃에 패딩 적용
+                const totalLayoutWidth = detectedWidth + padLeft + padRight;
                 let dynamicStyles = `
                     .notion-page-content {
                         width: ${detectedWidth}px !important;
                         max-width: ${detectedWidth}px !important;
                         min-width: ${detectedWidth}px !important;
                     }
+
+                    
 
                     .notion-sidebar-container, 
                     .notion-topbar, 
@@ -128,18 +133,23 @@ class PdfService {
                         white-space: pre-wrap !important;
                         font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
                     }
-                        
-
                     
                     .notion-app-inner, .notion-cursor-listener { height: auto !important; }
                     
                     ::-webkit-scrollbar { display: none !important; }
 
-                    .layout { padding-bottom: 0px !important; --margin-width: 0px !important; }
+                    .layout > .layout-content:nth-child(${padTopIdx}) { padding-top: ${padTop}px !important; }
 
-                    .notion-app {
-                    padding-top: ${padTop}px !important;
+                    .whenContentEditable, .layout, .layout-content {
+                        width: ${totalLayoutWidth}px !important;
+                        max-width: ${totalLayoutWidth}px !important;
+                        min-width: ${totalLayoutWidth}px !important;
+                    }
+
+
+                    .layout {
                         padding-bottom: ${padBottom}px !important;
+                        --margin-width: 0px !important;
                     }
 
                     .layout-content { 
@@ -147,9 +157,7 @@ class PdfService {
                         padding-right: ${padRight}px !important;
                     }
 
-                    .katex-mathml { 
-                        display: none !important; 
-                    }
+                    
                 `;
 
                 if (!includeTitle) dynamicStyles += `h1, .notion-page-block:has(h1) { display: none !important; }`;
@@ -167,7 +175,7 @@ class PdfService {
                 spans.forEach(span => {
                     let text = span.textContent;
                     if (text.includes(" ")) text = text.replace(/ /g, '\u00A0');
-                    if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0');
+                    if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0');
                     span.textContent = text;
                 });
 
@@ -201,7 +209,7 @@ class PdfService {
             const finalHeight = Math.ceil(dimensions.height + 100);
             const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
             
-            await page.setViewport({ width: 2560, height: finalHeight });
+            await page.setViewport({ width: finalWidth + 100, height: finalHeight });
 
             // 3. PDF 생성 (Extension의 Page.printToPDF 설정 반영)
             const pdfWebStream = await page.createPDFStream({

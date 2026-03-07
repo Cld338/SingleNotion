@@ -74,11 +74,11 @@
             </div>
             <div class="input-group-margin">
                 <label>좌측 여백</label>
-                <input type="number" id="marginLeft" value="0" min="0">
+                <input type="number" id="marginLeft" value="50" min="0">
             </div>
             <div class="input-group-margin">
                 <label>우측 여백</label>
-                <input type="number" id="marginRight" value="0" min="0">
+                <input type="number" id="marginRight" value="50" min="0">
             </div>
 
             <button type="button" id="downloadBtn" class="main-btn" style="margin-top: auto; width: 100%;" disabled>
@@ -133,6 +133,7 @@
             previewPage.style.paddingLeft = (document.getElementById('marginLeft').value || 0) + 'px';
             previewPage.style.paddingRight = (document.getElementById('marginRight').value || 0) + 'px';
         }
+        updatePreviewMargins();
 
         // 서버 PDF 변환 요청
         async function processConversion(options) {
@@ -223,7 +224,7 @@
             }
 
             try {
-                loadingText.innerText = "여백이 적용된 최종 PDF를 생성 중입니다...";
+                loadingText.innerText = "PDF를 생성 중입니다...";
                 overlay.style.display = 'flex';
                 downloadBtn.disabled = true;
 
