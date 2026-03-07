@@ -146,6 +146,10 @@ class PdfService {
                         padding-left: ${padLeft}px !important; 
                         padding-right: ${padRight}px !important;
                     }
+
+                    .katex-mathml { 
+                        display: none !important; 
+                    }
                 `;
 
                 if (!includeTitle) dynamicStyles += `h1, .notion-page-block:has(h1) { display: none !important; }`;
