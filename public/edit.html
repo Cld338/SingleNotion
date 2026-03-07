@@ -9,30 +9,170 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        body, html { height: 100%; margin: 0; display: flex; flex-direction: column; overflow: hidden; }
-        .editor-layout { display: flex; flex: 1; height: calc(100vh - 70px); }
+        /* 기본 레이아웃 설정 */
+        body, html { 
+            height: 100%; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+        }
         
-        .sidebar { width: 320px; background: #fff; border-left: 1px solid #eee; padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; z-index: 10;}
-        .sidebar-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.5rem; }
-        .input-group-margin { display: flex; flex-direction: column; gap: 0.5rem; }
-        .input-group-margin input { width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
+        .editor-layout { 
+            display: flex; 
+            flex: 1; 
+            height: calc(100vh - 80px); /* 내비바 높이 제외 */
+        }
         
-        /* 자체 뷰어 컨테이너: 스크롤 영역 */
+        /* 사이드바 최적화 */
+        .sidebar { 
+            width: 320px; 
+            background: #fff; 
+            border-left: 1px solid #eef2f6; 
+            padding: 1.5rem; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 1.25rem; 
+            overflow-y: auto; 
+            z-index: 10;
+        }
+        
+        .sidebar-title { 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            margin-bottom: 0.25rem; 
+            color: var(--text-main);
+        }
+
+        /* 여백 설정 컨테이너: 3x3 그리드 레이아웃 */
+.margin-control-container {
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 20px;
+    border: 1px solid #eef2f6;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 10px;
+    align-items: center;
+    justify-items: center;
+    margin-bottom: 20px;
+}
+
+/* 중앙 페이지 모형 */
+.page-mockup {
+    grid-column: 2;
+    grid-row: 2;
+    width: 60px;
+    height: 80px;
+    background: white;
+    border: 2px solid #cbd5e1;
+    border-radius: 4px;
+    position: relative;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.page-mockup::after {
+    content: '';
+    position: absolute;
+    top: 15%; left: 15%; right: 15%; bottom: 15%;
+    border: 1px dashed #e2e8f0;
+    border-radius: 2px;
+}
+
+/* 입력창 공통 스타일 */
+.margin-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+}
+
+.margin-input-wrapper label {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.margin-input-wrapper input {
+    width: 100%;
+    max-width: 65px;
+    height: 34px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.margin-input-wrapper input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* 그리드 위치 지정 */
+.wrapper-top { grid-column: 2; grid-row: 1; }
+.wrapper-bottom { grid-column: 2; grid-row: 3; }
+.wrapper-left { grid-column: 1; grid-row: 2; justify-self: end; }
+.wrapper-right { grid-column: 3; grid-row: 2; justify-self: start; }
+
+        .input-group-margin { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 6px; 
+        }
+
+        .input-group-margin label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .input-group-margin label i {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .input-group-margin input { 
+            width: 100%; 
+            padding: 0.6rem; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 8px; 
+            font-size: 0.95rem; 
+            text-align: center;
+            transition: border-color 0.2s ease;
+        }
+
+        .input-group-margin input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        
+        /* PDF 뷰어 컨테이너 */
         .preview-container { 
             flex: 1; 
             background: #525659;
             padding: 2rem; 
             display: flex; 
             justify-content: center;
-            align-items: flex-start; /* 내부 요소가 길어질 때 상단 여백이 잘리지 않도록 설정 */
+            align-items: flex-start; 
             overflow-y: auto;
         }
         
-        /* 종이(Paper) 역할을 하는 래퍼: 패딩으로 여백 제어 */
         .preview-page-wrapper { 
             background: #fff; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
-            transition: padding 0.1s ease;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3); 
+            transition: padding 0.1s ease, width 0.2s ease; 
             width: 100%; 
             max-width: 850px; 
             display: flex; 
@@ -40,11 +180,84 @@
             box-sizing: content-box; 
         }
         
-        /* Canvas: PDF를 이미지처럼 렌더링 */
         #pdfCanvas { 
             width: 100%; 
             height: auto; 
             display: block; 
+        }
+
+        /* 뷰어 확대/축소 컨트롤 */
+        .scale-control {
+            margin-top: 0.5rem;
+            padding-top: 1.25rem;
+            border-top: 1px dashed #e2e8f0;
+        }
+
+        .scale-control label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .scale-slider-wrapper {
+            width: 100%;
+            padding: 0;
+            margin: 10px 0;
+        }
+
+        /* 커스텀 슬라이더 스타일 */
+        .custom-range {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            background: transparent;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .custom-range:focus { outline: none; }
+
+        .custom-range::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        .custom-range::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            border: 3px solid #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            margin-top: -6px;
+            transition: transform 0.1s ease;
+        }
+
+        .custom-range:active::-webkit-slider-thumb {
+            transform: scale(1.2);
+        }
+
+        .scale-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .active-scale {
+            color: var(--primary-color);
+            background: rgba(99, 102, 241, 0.1);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.85rem;
         }
     </style>
 </head>
@@ -63,22 +276,42 @@
         </main>
 
         <aside class="sidebar">
-            <h2 class="sidebar-title">PDF 여백 설정 (px)</h2>
-            <div class="input-group-margin">
-                <label>상단 여백</label>
-                <input type="number" id="marginTop" value="0" min="0">
+            <h2 class="sidebar-title">여백 <span style="font-size: 0.8rem; font-weight: 400; color: var(--text-muted);">(px)</span></h2>
+
+            <div class="margin-control-container">
+                <div class="margin-input-wrapper wrapper-top">
+                    <label>Top</label>
+                    <input type="number" id="marginTop" value="0" min="0">
+                </div>
+
+                <div class="margin-input-wrapper wrapper-left">
+                    <label>Left</label>
+                    <input type="number" id="marginLeft" value="50" min="0">
+                </div>
+
+                <div class="page-mockup"></div>
+
+                <div class="margin-input-wrapper wrapper-right">
+                    <label>Right</label>
+                    <input type="number" id="marginRight" value="50" min="0">
+                </div>
+
+                <div class="margin-input-wrapper wrapper-bottom">
+                    <label>Bottom</label>
+                    <input type="number" id="marginBottom" value="0" min="0">
+                </div>
             </div>
-            <div class="input-group-margin">
-                <label>하단 여백</label>
-                <input type="number" id="marginBottom" value="0" min="0">
-            </div>
-            <div class="input-group-margin">
-                <label>좌측 여백</label>
-                <input type="number" id="marginLeft" value="50" min="0">
-            </div>
-            <div class="input-group-margin">
-                <label>우측 여백</label>
-                <input type="number" id="marginRight" value="50" min="0">
+
+            <div class="input-group-margin scale-control">
+                <label><i class="fa-solid fa-magnifying-glass-plus"></i> 뷰어 확대/축소</label>
+                <div class="scale-slider-wrapper">
+                    <input type="range" id="viewerScale" value="100" min="50" max="150" step="5" class="custom-range">
+                    <div class="scale-labels">
+                        <span>50%</span>
+                        <span id="scaleValue" class="active-scale">100%</span>
+                        <span>150%</span>
+                    </div>
+                </div>
             </div>
 
             <button type="button" id="downloadBtn" class="main-btn" style="margin-top: auto; width: 100%;" disabled>
@@ -95,6 +328,8 @@
             <p class="loading-subtext">잠시만 기다려 주세요 (최대 2분 소요)</p>
         </div>
     </div>
+
+
 
     <script>
         // PDF.js 워커 설정
@@ -115,27 +350,63 @@
 
         let initialBlobUrl = null;
         let finalFileName = 'notion_page.pdf';
-        
+        let pdfBaseWidth = 1; // 비율 계산을 위한 PDF 원본 너비 저장 변수
+
         const overlay = document.getElementById('loadingOverlay');
         const loadingText = document.getElementById('loadingText');
         const downloadBtn = document.getElementById('downloadBtn');
         const previewPage = document.getElementById('previewPage');
+        const viewerScale = document.getElementById('viewerScale');
+        const scaleValue = document.getElementById('scaleValue');
+        const canvas = document.getElementById('pdfCanvas');
 
-        // 실시간 여백 반영
+        // 1. 실시간 여백 업데이트 함수 (비율 계산 로직 포함)
+        function updatePreviewMargins() {
+            if (!canvas || !pdfBaseWidth) return;
+
+            // 현재 화면에 표시되는 캔버스의 실제 CSS 너비를 가져옵니다.
+            const currentDisplayWidth = canvas.clientWidth;
+
+            // 비율 계산: (현재 표시 너비 / PDF 원본 너비)
+            // 이 비율을 곱해야 화면 크기가 줄어들 때 여백도 비례해서 줄어듭니다.
+            const displayRatio = currentDisplayWidth / pdfBaseWidth;
+
+            const mT = parseInt(document.getElementById('marginTop').value) || 0;
+            const mB = parseInt(document.getElementById('marginBottom').value) || 0;
+            const mL = parseInt(document.getElementById('marginLeft').value) || 0;
+            const mR = parseInt(document.getElementById('marginRight').value) || 0;
+
+            // 비율이 적용된 패딩 설정
+            previewPage.style.paddingTop = (mT * displayRatio) + 'px';
+            previewPage.style.paddingBottom = (mB * displayRatio) + 'px';
+            previewPage.style.paddingLeft = (mL * displayRatio) + 'px';
+            previewPage.style.paddingRight = (mR * displayRatio) + 'px';
+        }
+
+        // 2. 이벤트 리스너 등록
         const marginInputs = ['marginTop', 'marginBottom', 'marginLeft', 'marginRight'];
         marginInputs.forEach(id => {
             document.getElementById(id).addEventListener('input', updatePreviewMargins);
         });
 
-        function updatePreviewMargins() {
-            previewPage.style.paddingTop = (document.getElementById('marginTop').value || 0) + 'px';
-            previewPage.style.paddingBottom = (document.getElementById('marginBottom').value || 0) + 'px';
-            previewPage.style.paddingLeft = (document.getElementById('marginLeft').value || 0) + 'px';
-            previewPage.style.paddingRight = (document.getElementById('marginRight').value || 0) + 'px';
-        }
-        updatePreviewMargins();
+        // 브라우저 창 크기 변경 시 대응
+        window.addEventListener('resize', updatePreviewMargins);
 
-        // 서버 PDF 변환 요청
+        // 뷰어 확대/축소 슬라이더 제어
+        viewerScale.addEventListener('input', () => {
+            const scale = viewerScale.value;
+            scaleValue.innerText = `${scale}%`;
+            
+            // 시각적 크기 조정 (기본 기준 850px에 비율 적용)
+            const baseWidth = 850;
+            const newWidth = (baseWidth * scale) / 100;
+            previewPage.style.maxWidth = `${newWidth}px`;
+
+            // 너비 변경 후 즉시 마진 재계산 (비율 유지)
+            requestAnimationFrame(updatePreviewMargins);
+        });
+
+        // 3. 서버 PDF 변환 요청 로직
         async function processConversion(options) {
             try {
                 const response = await fetch('/convert-url', {
@@ -171,16 +442,17 @@
             }
         }
 
-        // PDF를 Canvas에 렌더링
-        async function renderPdf(blobUrl) {
+        // 4. PDF를 Canvas에 렌더링
+        async function renderPdf(blobUrl, renderScale = 2) {
             const loadingTask = pdfjsLib.getDocument(blobUrl);
             const pdf = await loadingTask.promise;
-            const page = await pdf.getPage(1); // 단일 페이지 렌더링
+            const page = await pdf.getPage(1);
 
-            const scale = 2; // 선명도를 위해 2배율 렌더링
-            const viewport = page.getViewport({ scale: scale });
+            // PDF 원본(scale 1) 상태의 너비를 저장하여 비율 계산의 기준으로 삼음
+            const unscaledViewport = page.getViewport({ scale: 1 });
+            pdfBaseWidth = unscaledViewport.width;
 
-            const canvas = document.getElementById('pdfCanvas');
+            const viewport = page.getViewport({ scale: renderScale });
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
@@ -190,6 +462,9 @@
                 viewport: viewport
             };
             await page.render(renderContext).promise;
+
+            // 렌더링 직후 여백 적용
+            updatePreviewMargins();
         }
 
         async function loadInitialPreview() {
@@ -202,7 +477,6 @@
                 initialBlobUrl = URL.createObjectURL(blob);
                 finalFileName = result.fileName || 'notion_page.pdf';
                 
-                // iframe 대신 Canvas 렌더링 실행
                 await renderPdf(initialBlobUrl);
                 downloadBtn.disabled = false;
             } finally {
@@ -210,8 +484,7 @@
             }
         }
 
-        loadInitialPreview();
-
+        // 5. 다운로드 실행
         downloadBtn.addEventListener('click', async () => {
             const mTop = parseInt(document.getElementById('marginTop').value) || 0;
             const mBot = parseInt(document.getElementById('marginBottom').value) || 0;
@@ -250,6 +523,9 @@
             a.click();
             a.remove();
         }
+
+        // 초기 실행
+        loadInitialPreview();
     </script>
 </body>
 </html>

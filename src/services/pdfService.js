@@ -40,7 +40,7 @@ class PdfService {
             // 1. 초기 뷰포트를 충분히 넓게 설정하여 데스크톱 레이아웃 유도
             await page.setViewport({ width: 2460, height: 1000 });
 
-            await page.goto(url, { waitUntil: 'networkidle2' });
+            await page.goto(url, { waitUntil: 'networkidle0' });
 
             // [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
             const dimensions = await page.evaluate(async (opts) => {
@@ -58,7 +58,7 @@ class PdfService {
                 const contentEl = document.querySelector('.notion-page-content');
                 const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) : 1080;
 
-                // B. 레이지 로딩 해제 (스크롤)
+                // B. Lazy 로딩 해제 및 이미지 로딩 보장(스크롤)
                 await new Promise((resolve) => {
                     let totalHeight = 0;
                     const distance = 800;
@@ -72,6 +72,43 @@ class PdfService {
                             resolve();
                         }
                     }, 50);
+                });
+
+                await new Promise(async (resolve) => {
+                    // 1. 문서 내 모든 웹 폰트 로딩 대기 (KaTeX 수학 기호 폰트 포함)
+                    await document.fonts.ready;
+
+                    let maxAttempts = 50; // 최대 10초 대기
+                    let attempts = 0;
+                    let previousKatexCount = -1;
+                    let stableCount = 0;
+
+                    const checkResources = () => {
+                        attempts++;
+                        
+                        // 2. 이미지 로딩 완료 확인
+                        const images = Array.from(document.images);
+                        const allImagesLoaded = images.every(img => img.complete);
+
+                        // 3. KaTeX 렌더링 안정화 확인 (DOM 내 개수 변화 추적)
+                        const currentKatexCount = document.querySelectorAll('.katex-mathml').length;
+                        if (currentKatexCount === previousKatexCount) {
+                            stableCount++;
+                        } else {
+                            stableCount = 0; // 개수가 변했다면 렌더링 중이므로 카운트 초기화
+                            previousKatexCount = currentKatexCount;
+                        }
+
+                        // 이미지가 모두 로드되었고, KaTeX 요소 개수가 3회(약 600ms) 연속 변동이 없으면 렌더링 완료로 간주
+                        const isKatexStable = stableCount >= 3;
+
+                        if ((allImagesLoaded && isKatexStable) || attempts >= maxAttempts) {
+                            setTimeout(resolve, 500); // 최종 레이아웃 안정을 위한 짧은 대기 후 종료
+                        } else {
+                            setTimeout(checkResources, 200);
+                        }
+                    };
+                    checkResources();
                 });
 
                 // C. 레이아웃 요소 크기 고정 (Freeze)
@@ -157,6 +194,11 @@ class PdfService {
                         padding-right: ${padRight}px !important;
                     }
 
+                    /* .katex-mathml {
+                        display: none !important;
+                    } 
+                    */
+
                     
                 `;
 
@@ -210,6 +252,10 @@ class PdfService {
             const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
             
             await page.setViewport({ width: finalWidth + 100, height: finalHeight });
+            
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+
 
             // 3. PDF 생성 (Extension의 Page.printToPDF 설정 반영)
             const pdfWebStream = await page.createPDFStream({
