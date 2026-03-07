@@ -10,7 +10,7 @@ class PdfService {
         try {
             page = await browser.newPage();
 
-            // 보안 및 SSRF 방지 로직 (기존 유지)
+            // 보안 패치 로직 (기존 유지)
             await page.setRequestInterception(true);
             page.on('request', request => {
                 const reqUrl = request.url().split('?')[0];
@@ -30,27 +30,32 @@ class PdfService {
             });
 
             page.setDefaultNavigationTimeout(120000);
-            const { width = '1080', includeBanner, includeTitle, includeTags, includeDiscussion } = options;
+            const { includeBanner, includeTitle, includeTags, includeDiscussion } = options;
 
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-            // 초기 뷰포트 설정
-            await page.setViewport({ width: parseInt(width), height: 1000 });
+            
+            // 1. 초기 뷰포트를 충분히 넓게 설정하여 데스크톱 레이아웃 유도
+            await page.setViewport({ width: 2460, height: 1000 });
 
             await page.goto(url, { waitUntil: 'networkidle2' });
 
-            // [Extension 로직 이식] 레이아웃 고정 및 스타일 최적화
+            // [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
             const dimensions = await page.evaluate(async (opts) => {
-                const { includeTitle, includeBanner, includeTags, includeDiscussion, width } = opts;
+                const { includeTitle, includeBanner, includeTags, includeDiscussion } = opts;
 
-                // 1. 레이지 로딩 해제 (스크롤)
+                // A. 너비 자동 감지 (popup.js 로직)
+                const contentEl = document.querySelector('.notion-page-content');
+                const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) : 1080;
+
+                // B. 레이지 로딩 해제 (스크롤)
                 await new Promise((resolve) => {
                     let totalHeight = 0;
-                    const distance = 400;
+                    const distance = 800;
                     const timer = setInterval(() => {
                         const scrollHeight = document.body.scrollHeight;
                         window.scrollBy(0, distance);
                         totalHeight += distance;
-                        if (totalHeight >= scrollHeight + 200) {
+                        if (totalHeight >= scrollHeight + 1000) {
                             clearInterval(timer);
                             window.scrollTo(0, 0);
                             resolve();
@@ -58,7 +63,7 @@ class PdfService {
                     }, 50);
                 });
 
-                // 2. 이미지 및 레이아웃 요소 크기 고정 (Freeze)
+                // C. 레이아웃 요소 크기 고정 (Freeze)
                 let freezeCSS = "";
                 const layoutElements = document.querySelectorAll('.notion-image-block, .notion-asset-wrapper, div[data-block-id][style*="width"]');
                 layoutElements.forEach((el, index) => {
@@ -74,30 +79,55 @@ class PdfService {
                         }\n`;
                 });
 
-                // 3. Extension 기반 핵심 스타일 정의
+                // D. Extension 기반 스타일 주입 (감지된 너비 사용)
                 let dynamicStyles = `
                     .notion-page-content {
-                        width: ${width}px !important;
-                        max-width: ${width}px !important;
-                        min-width: ${width}px !important;
+                        width: ${detectedWidth}px !important;
+                        max-width: ${detectedWidth}px !important;
+                        min-width: ${detectedWidth}px !important;
                     }
-                    .notion-sidebar-container, .notion-topbar, .notion-topbar-mobile,
-                    .notion-help-button, #skip-to-content, header, .autolayout-fill-width { display: none !important; }
+
+                    .notion-sidebar-container, 
+                    .notion-topbar, 
+                    .notion-topbar-mobile,
+                    .notion-help-button,
+                    #skip-to-content,
+                    header,
+                    .autolayout-fill-width,
+                    .notion-history-container
+                    { display: none !important; }
+
+                    .notion-floating-table-of-contents {
+                        height: 1px !important;
+                    }
                     
-                    .notion-scroller { overflow: hidden !important; }
+                    div[role="table"][aria-label="Page properties"] + div,
+                    div[role="table"][aria-label="페이지 속성"] + div
+                    { display: none !important; }
+
+                    .notion-scroller{
+                        overflow: hidden !important;
+                    }
+
                     .notion-selectable-container > .notion-scroller { 
                         overflow: visible !important; 
                         height: auto !important;
                     }
-                    .notion-app-inner, .notion-cursor-listener { height: auto !important; }
-                    .layout { padding-bottom: 0px !important; --margin-width: 0px !important; }
-                    .layout-content { padding-left: 100px !important; padding-right: 100px !important; }
-                    
+                    /* 코드 텍스트 줄바꿈 강제 및 공백 유지 */
                     .notion-code-block, .notion-code-block span {
                         white-space: pre-wrap !important;
                         font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
                     }
+                        
+
+                    
+                    .notion-app-inner, .notion-cursor-listener { height: auto !important; }
+                    
                     ::-webkit-scrollbar { display: none !important; }
+
+                    .layout { padding-bottom: 0px !important; --margin-width: 0px !important; }
+
+                    .layout-content { padding-left: 100px !important; padding-right: 100px !important; }
                 `;
 
                 if (!includeTitle) dynamicStyles += `h1, .notion-page-block:has(h1) { display: none !important; }`;
@@ -106,44 +136,55 @@ class PdfService {
                 if (!includeDiscussion) dynamicStyles += `.layout-content-with-divider:has(.notion-page-view-discussion) { display: none !important;}`;
 
                 const styleTag = document.createElement('style');
+                styleTag.id = 'sn-pdf-style';
                 styleTag.innerHTML = dynamicStyles + freezeCSS;
                 document.head.appendChild(styleTag);
 
-                // 4. 텍스트 노드 공백 처리 (Extension 버전 동기화)
+                // E. 공백 및 개행 처리
                 const spans = document.querySelectorAll('span[data-token-index="0"]');
                 spans.forEach(span => {
                     let text = span.textContent;
                     if (text.includes(" ")) text = text.replace(/ /g, '\u00A0');
-                    if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'); // 8칸 동기화
+                    if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0');
                     span.textContent = text;
                 });
 
-                // 5. 렌더링 확정 대기
                 window.dispatchEvent(new Event('resize'));
                 await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 3000)));
 
-                // 6. 최종 높이 계산
-                const contentEl = document.querySelector('.notion-page-content');
-                const contentHeight = contentEl ? contentEl.getBoundingClientRect().height : document.body.scrollHeight;
+                // F. 최종 높이 재계산
+                const selectors = ['.notion-page-content', '.layout'];
+                let contentHeight = 0;
+                for (const selector of selectors) {
+                    const el = document.querySelector(selector);
+                    if (el) {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.height > contentHeight) contentHeight = rect.height;
+                    }
+                }
+
+                if (contentHeight < document.body.scrollHeight) contentHeight = document.body.scrollHeight;
                 
                 return {
                     height: Math.ceil(contentHeight) + 100,
-                    width: parseInt(width)
+                    width: detectedWidth
                 };
-            }, { includeBanner, includeTitle, includeTags, includeDiscussion, width });
+            }, { includeBanner, includeTitle, includeTags, includeDiscussion });
 
-            // 계산된 높이로 뷰포트 재설정
-            await page.setViewport({ width: dimensions.width, height: dimensions.height });
+            // 2. 계산된 높이와 너비로 뷰포트 최종 조정
+            await page.setViewport({ width: 2560, height: dimensions.height + 200 });
 
-            // PDF 생성 (Extension의 Page.printToPDF 옵션과 매칭)
+            // 3. PDF 생성 (Extension의 Page.printToPDF 설정 반영)
             const pdfWebStream = await page.createPDFStream({
-                width: `${dimensions.width}px`,
+                width: `${dimensions.width+200}px`,
                 height: `${dimensions.height}px`,
                 printBackground: true,
                 displayHeaderFooter: false,
                 margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
                 pageRanges: '1',
-                preferCSSPageSize: false // Extension 설정 반영
+                preferCSSPageSize: false,
+                tagged: true,
+                outline: true,
             });
 
             const nodeStream = Readable.fromWeb(pdfWebStream);

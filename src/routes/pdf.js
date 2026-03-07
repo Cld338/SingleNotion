@@ -17,7 +17,6 @@ const convertLimiter = rateLimit({
 
 const convertSchema = Joi.object({
     url: Joi.string().uri().required(),
-    width: Joi.string().pattern(/^\d+px$/).default('1080px'),
     includeBanner: Joi.boolean().default(false),
     includeTitle: Joi.boolean().default(false),
     includeTags: Joi.boolean().default(false)
@@ -35,7 +34,7 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
 
         const job = await pdfQueue.add('convert', {
             targetUrl: value.url,
-            options: { width: value.width, includeBanner: value.includeBanner, includeTitle: value.includeTitle, includeTags: value.includeTags }
+            options: { includeBanner: value.includeBanner, includeTitle: value.includeTitle, includeTags: value.includeTags }
         }, {
             attempts: 3, // 최대 3회 재시도
             backoff: {
