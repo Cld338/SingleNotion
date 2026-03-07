@@ -26,6 +26,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 app.use(express.static(path.join(__dirname, '../public')));
 
+console.log(path.join(__dirname, '../public'));
+
+
 app.use('/downloads', express.static(path.join(__dirname, '../public/downloads'), {
     setHeaders: (res, path, stat) => {
         res.set('Cross-Origin-Resource-Policy', 'cross-origin');
