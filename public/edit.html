@@ -275,7 +275,7 @@
         </main>
 
         <aside class="sidebar">
-            <h2 class="sidebar-title">여백 <span style="font-size: 0.8rem; font-weight: 400; color: var(--text-muted);">(px)</span></h2>
+            <h2 class="sidebar-title">여백<span style="font-size: 0.8rem; font-weight: 400; color: var(--text-muted);">(px)</span></h2>
 
             <div class="margin-control-container">
                 <div class="margin-input-wrapper wrapper-top">
@@ -402,11 +402,11 @@
                 let currentVal = parseInt(this.value);
 
                 if (currentVal < minW) {
-                    alert(`스케일 제한(0.1 ~ 2.0)에 의해 페이지 너비는 최소 ${minW}px 이상이어야 합니다.`);
+                    alert(`비율 제한(0.1 ~ 2.0)에 의해 페이지 너비는 최소 ${minW}px 이상이어야 합니다.`);
                     this.value = minW;
                     updatePreviewMargins();
                 } else if (currentVal > maxW) {
-                    alert(`스케일 제한(0.1 ~ 2.0)에 의해 페이지 너비는 최대 ${maxW}px 이하여야 합니다.`);
+                    alert(`비율 제한(0.1 ~ 2.0)에 의해 페이지 너비는 최대 ${maxW}px 이하여야 합니다.`);
                     this.value = maxW;
                     updatePreviewMargins();
                 }
@@ -511,7 +511,7 @@
                     if (currentVal < minW) pWidthInput.value = minW;
                     if (currentVal > maxW) pWidthInput.value = maxW;
                 }
-                
+
                 loadingText.innerText = "미리보기 화면 준비중...";
                 await renderPdf(initialBlobUrl);
                 downloadBtn.disabled = false;
