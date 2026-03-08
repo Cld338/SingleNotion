@@ -390,6 +390,29 @@
             document.getElementById(id)?.addEventListener('input', updatePreviewMargins);
         });
 
+        const pageWidthInput = document.getElementById('pageWidth');
+        if (pageWidthInput) {
+            pageWidthInput.addEventListener('change', function() {
+                const minW = parseInt(this.min);
+                const maxW = parseInt(this.max);
+                
+                // 서버로부터 기준 너비를 받아오기 전이면 실행하지 않음
+                if (isNaN(minW) || isNaN(maxW)) return; 
+                
+                let currentVal = parseInt(this.value);
+
+                if (currentVal < minW) {
+                    alert(`스케일 제한(0.1 ~ 2.0)에 의해 페이지 너비는 최소 ${minW}px 이상이어야 합니다.`);
+                    this.value = minW;
+                    updatePreviewMargins();
+                } else if (currentVal > maxW) {
+                    alert(`스케일 제한(0.1 ~ 2.0)에 의해 페이지 너비는 최대 ${maxW}px 이하여야 합니다.`);
+                    this.value = maxW;
+                    updatePreviewMargins();
+                }
+            });
+        }
+
         window.addEventListener('resize', updatePreviewMargins);
 
         viewerScale.addEventListener('input', () => {
@@ -446,7 +469,7 @@
             }
         }
 
-        async function renderPdf(blobUrl, renderScale = 2) {
+        async function renderPdf(blobUrl, renderScale = 1.0) {
             const loadingTask = pdfjsLib.getDocument(blobUrl);
             const pdf = await loadingTask.promise;
             const page = await pdf.getPage(1);
@@ -463,12 +486,33 @@
 
         async function loadInitialPreview() {
             try {
+                loadingText.innerText = "미리보기를 생성하는 중...";
                 overlay.style.display = 'flex';
                 const result = await processConversion(baseOptions);
+                
+
+                loadingText.innerText = "미리보기 다운로드 중...";
                 const pdfResponse = await fetch(result.downloadUrl);
                 const blob = await pdfResponse.blob();
                 initialBlobUrl = URL.createObjectURL(blob);
                 finalFileName = result.fileName || 'notion_page.pdf';
+                
+                // 추가: 스케일 0.1 ~ 2.0 범위에 따른 입력 제한 설정
+                if (result.detectedWidth) {
+                    const minW = Math.ceil(result.detectedWidth * 0.1);
+                    const maxW = Math.floor(result.detectedWidth * 2.0);
+                    const pWidthInput = document.getElementById('pageWidth');
+                    
+                    pWidthInput.min = minW;
+                    pWidthInput.max = maxW;
+                    pWidthInput.title = `가능 범위: ${minW}px ~ ${maxW}px (기준 너비: ${result.detectedWidth}px)`;
+                    
+                    let currentVal = parseInt(pWidthInput.value);
+                    if (currentVal < minW) pWidthInput.value = minW;
+                    if (currentVal > maxW) pWidthInput.value = maxW;
+                }
+                
+                loadingText.innerText = "미리보기 화면 준비중...";
                 await renderPdf(initialBlobUrl);
                 downloadBtn.disabled = false;
             } finally {
@@ -481,7 +525,18 @@
             const mBot = parseInt(document.getElementById('marginBottom').value) || 0;
             const mLeft = parseInt(document.getElementById('marginLeft').value) || 0;
             const mRight = parseInt(document.getElementById('marginRight').value) || 0;
-            const pWidth = parseInt(document.getElementById('pageWidth').value);
+            const pWidthInput = document.getElementById('pageWidth');
+            let pWidth = parseInt(pWidthInput.value);
+
+            // 추가: 요청 전 클라이언트 단에서 너비 유효성 한 번 더 검증
+            const minW = parseInt(pWidthInput.min);
+            const maxW = parseInt(pWidthInput.max);
+            
+            if (minW && maxW && (pWidth < minW || pWidth > maxW)) {
+                alert(`페이지 너비는 ${minW}px에서 ${maxW}px 사이여야 합니다.`);
+                pWidthInput.value = pWidth < minW ? minW : maxW;
+                return; 
+            }
 
             if (mTop === 0 && mBot === 0 && mLeft === 0 && mRight === 0 && pWidth === baseOptions.pageWidth && initialBlobUrl) {
                 triggerDownload(initialBlobUrl, finalFileName);

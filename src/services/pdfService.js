@@ -281,7 +281,10 @@ class PdfService {
                 await browserPool.release(browser);
             });
 
-            return nodeStream;
+            return {
+                stream: nodeStream,
+                detectedWidth: dimensions.width
+            };
 
         } catch (error) {
             logger.error(`PDF Generation failed: ${error.message}`);

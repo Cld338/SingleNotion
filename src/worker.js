@@ -13,7 +13,10 @@ const worker = new Worker('pdf-conversion', async (job) => {
     const startTime = performance.now(); // 변환 시작 시간 기록
 
     try {
-        const pdfStream = await pdfService.generatePdf(targetUrl, options);
+        // 기존: const pdfStream = await pdfService.generatePdf(targetUrl, options);
+        // 변경: stream과 detectedWidth를 받아옴
+        const { stream: pdfStream, detectedWidth } = await pdfService.generatePdf(targetUrl, options);
+        
         const fileName = `notion-${job.id}-${Date.now()}.pdf`;
         const downloadUrl = await storage.saveStream(fileName, pdfStream);
 
@@ -23,8 +26,8 @@ const worker = new Worker('pdf-conversion', async (job) => {
 
         logger.info(`[Job ${job.id}] Successfully completed in ${durationSec} seconds`);
         
-        // 클라이언트(SSE) 측으로 소요 시간 데이터를 함께 전달하기 위해 반환값에 추가
-        return { downloadUrl, fileName, duration: durationSec };
+        // 변경: 클라이언트 측으로 원본 너비(detectedWidth) 데이터 함께 전달
+        return { downloadUrl, fileName, duration: durationSec, detectedWidth };
 
     } catch (error) {
         logger.error(`[Job ${job.id}] Failed attempt ${job.attemptsMade + 1}: ${error.message}`);

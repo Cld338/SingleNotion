@@ -50,7 +50,7 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
                 pageWidth: value.pageWidth // 작업 옵션에 너비 추가
             }
         }, {
-            attempts: 3, // 최대 3회 재시도
+            attempts: 5, // 최대 3회 재시도
             backoff: {
                 type: 'exponential', // 지수 백오프 전략 (1초, 2초, 4초 대기 후 재시도)
                 delay: 1000
@@ -134,7 +134,7 @@ router.get('/job-events/:id', async (req, res) => {
             clearInterval(intervalId);
             res.end();
         }
-    }, 2000);
+    }, 500);
 
     // 3. 연결 유실 대비 예외 처리 강화
     req.on('close', () => {
