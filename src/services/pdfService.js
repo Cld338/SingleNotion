@@ -128,7 +128,7 @@ class PdfService {
                 });
 
                 // D. Extension 기반 스타일 주입 (감지된 너비 사용)
-                const padTopIdx = includeBanner ? 1 : (includeTags ? 2 : 3); // 배너 포함 시 첫 번째 레이아웃에 패딩 적용
+                const padTopIdx = includeBanner ? 3 : (includeTags ? 4 : 5); // 배너 포함 시 첫 번째 레이아웃에 패딩 적용
                 const totalLayoutWidth = detectedWidth + padLeft + padRight;
                 let dynamicStyles = `
                     .notion-page-content {
