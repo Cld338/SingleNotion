@@ -1,6 +1,7 @@
 ﻿const { Readable } = require('stream');
 const logger = require('../utils/logger');
 const browserPool = require('../utils/browserPool');
+const { log } = require('console');
 
 class PdfService {
     async generatePdf(url, options) {
@@ -31,7 +32,7 @@ class PdfService {
             });
 
             page.setDefaultNavigationTimeout(120000);
-            const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight } = options;
+            const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = options;
             
             
             logger.info(`Margin - Top: ${marginTop}, Bottom: ${marginBottom}, Left: ${marginLeft}, Right: ${marginRight}`);
@@ -44,19 +45,19 @@ class PdfService {
 
             // [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
             const dimensions = await page.evaluate(async (opts) => {
-                const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight } = opts;
-
-                // 상하좌우 패딩 값 설정 (기본값 0)
-                const padTop = Number(marginTop) || 0;
-                const padBottom = Number(marginBottom) || 0;
-                const padLeft = Number(marginLeft) || 0;
-                const padRight = Number(marginRight) || 0;
-
-
+                const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = opts;
 
                 // A. 너비 자동 감지 (popup.js 로직)
                 const contentEl = document.querySelector('.notion-page-content');
                 const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) : 1080;
+
+                const scale = pageWidth ? (pageWidth / detectedWidth) : 1;
+
+                // 상하좌우 패딩 값 설정 (기본값 0)
+                const padTop = (Number(marginTop) || 0) / scale;
+                const padBottom = (Number(marginBottom) || 0) / scale;
+                const padLeft = (Number(marginLeft) || 0) / scale;
+                const padRight = (Number(marginRight) || 0) / scale;
 
                 // B. Lazy 로딩 해제 및 이미지 로딩 보장(스크롤)
                 await new Promise((resolve) => {
@@ -193,11 +194,9 @@ class PdfService {
                         padding-left: ${padLeft}px !important; 
                         padding-right: ${padRight}px !important;
                     }
-
-                    /* .katex-mathml {
+                    .katex-mathml {
                         display: none !important;
                     } 
-                    */
 
                     
                 `;
@@ -243,9 +242,12 @@ class PdfService {
                     padTop: padTop,
                     padBottom: padBottom,
                     padLeft: padLeft,
-                    padRight: padRight
+                    padRight: padRight,
+                    scale: scale // 계산된 스케일을 반환하여 외부에서 사용
                 };
-            }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight });
+            }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
+
+            logger.info(`Calculated scale: ${dimensions.scale}`);
 
             // 2. 계산된 높이와 너비로 뷰포트 최종 조정
             const finalHeight = Math.ceil(dimensions.height + 100);
@@ -255,12 +257,15 @@ class PdfService {
             
             await new Promise(resolve => setTimeout(resolve, 3000));
 
-
+            const scale = dimensions.scale;
+            const pdfWidth = finalWidth * scale;
+            const pdfHeight = finalHeight * scale;
 
             // 3. PDF 생성 (Extension의 Page.printToPDF 설정 반영)
             const pdfWebStream = await page.createPDFStream({
-                width: `${finalWidth}px`,
-                height: `${finalHeight}px`,
+                width: `${pdfWidth}px`,
+                height: `${pdfHeight}px`,
+                scale: scale,
                 printBackground: true,
                 displayHeaderFooter: false,
                 margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },

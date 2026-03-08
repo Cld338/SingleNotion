@@ -302,6 +302,11 @@
                 </div>
             </div>
 
+            <h2 class="sidebar-title">페이지 너비 <span style="font-size: 0.8rem; font-weight: 400; color: var(--text-muted);">(px)</span></h2>
+            <div class="input-group-margin" style="margin-bottom: 20px;">
+                <input type="number" id="pageWidth" value="1080" min="500" max="3000" title="기본값 1080px">
+            </div>
+
             <div class="input-group-margin scale-control">
                 <label><i class="fa-solid fa-magnifying-glass-plus"></i> 뷰어 확대/축소</label>
                 <div class="scale-slider-wrapper">
@@ -340,7 +345,8 @@
             url: urlParams.get('url'),
             includeTitle: urlParams.get('includeTitle') === 'true',
             includeBanner: urlParams.get('includeBanner') === 'true',
-            includeTags: urlParams.get('includeTags') === 'true'
+            includeTags: urlParams.get('includeTags') === 'true',
+            pageWidth: parseInt(urlParams.get('pageWidth')) || 1080 // 기본 너비 추가
         };
 
         if (!baseOptions.url) {
@@ -364,30 +370,45 @@
         function updatePreviewMargins() {
             if (!canvas || !pdfBaseWidth) return;
 
-            // 현재 화면에 표시되는 캔버스의 실제 CSS 너비를 가져옵니다.
             const currentDisplayWidth = canvas.clientWidth;
-
-            // 비율 계산: (현재 표시 너비 / PDF 원본 너비)
-            // 이 비율을 곱해야 화면 크기가 줄어들 때 여백도 비례해서 줄어듭니다.
+            // 디스플레이 렌더링 비율
             const displayRatio = currentDisplayWidth / pdfBaseWidth;
+
+            // 추가: 사용자가 설정한 출력 너비(pageWidth)에 따른 스케일 계산
+            const pWidthInput = document.getElementById('pageWidth');
+            const targetWidth = (pWidthInput && pWidthInput.value) ? parseInt(pWidthInput.value) : pdfBaseWidth;
+            const scale = targetWidth / pdfBaseWidth; // 원본 대비 스케일 배율
 
             const mT = parseInt(document.getElementById('marginTop').value) || 0;
             const mB = parseInt(document.getElementById('marginBottom').value) || 0;
             const mL = parseInt(document.getElementById('marginLeft').value) || 0;
             const mR = parseInt(document.getElementById('marginRight').value) || 0;
 
-            // 비율이 적용된 패딩 설정
-            previewPage.style.paddingTop = (mT * displayRatio) + 'px';
-            previewPage.style.paddingBottom = (mB * displayRatio) + 'px';
-            previewPage.style.paddingLeft = (mL * displayRatio) + 'px';
-            previewPage.style.paddingRight = (mR * displayRatio) + 'px';
+            // 핵심: 스케일이 2배면 여백은 1/2로 보여야 하므로 scale로 나눔
+            const adjustedMT = mT / scale;
+            const adjustedMB = mB / scale;
+            const adjustedML = mL / scale;
+            const adjustedMR = mR / scale;
+
+            // 뷰어 캔버스 래퍼에 패딩 적용
+            previewPage.style.paddingTop = (adjustedMT * displayRatio) + 'px';
+            previewPage.style.paddingBottom = (adjustedMB * displayRatio) + 'px';
+            previewPage.style.paddingLeft = (adjustedML * displayRatio) + 'px';
+            previewPage.style.paddingRight = (adjustedMR * displayRatio) + 'px';
         }
 
-        // 2. 이벤트 리스너 등록
+        // 2. 이벤트 리스너 등록 수정 (pageWidth 추가)
         const marginInputs = ['marginTop', 'marginBottom', 'marginLeft', 'marginRight'];
         marginInputs.forEach(id => {
-            document.getElementById(id).addEventListener('input', updatePreviewMargins);
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', updatePreviewMargins);
         });
+
+        // 너비 입력 필드 변경 시에도 미리보기 즉시 업데이트
+        const pageWidthEl = document.getElementById('pageWidth');
+        if (pageWidthEl) {
+            pageWidthEl.addEventListener('input', updatePreviewMargins);
+        }
 
         // 브라우저 창 크기 변경 시 대응
         window.addEventListener('resize', updatePreviewMargins);
@@ -486,34 +507,37 @@
 
         // 5. 다운로드 실행
         downloadBtn.addEventListener('click', async () => {
-            const mTop = parseInt(document.getElementById('marginTop').value) || 0;
-            const mBot = parseInt(document.getElementById('marginBottom').value) || 0;
-            const mLeft = parseInt(document.getElementById('marginLeft').value) || 0;
-            const mRight = parseInt(document.getElementById('marginRight').value) || 0;
+        const mTop = parseInt(document.getElementById('marginTop').value) || 0;
+        const mBot = parseInt(document.getElementById('marginBottom').value) || 0;
+        const mLeft = parseInt(document.getElementById('marginLeft').value) || 0;
+        const mRight = parseInt(document.getElementById('marginRight').value) || 0;
+        const pWidthInput = document.getElementById('pageWidth').value;
+        const pWidth = pWidthInput ? parseInt(pWidthInput) : null;
 
-            if (mTop === 0 && mBot === 0 && mLeft === 0 && mRight === 0 && initialBlobUrl) {
-                triggerDownload(initialBlobUrl, finalFileName);
-                return;
-            }
+        if (mTop === 0 && mBot === 0 && mLeft === 0 && mRight === 0 && !pWidth && initialBlobUrl) {
+            triggerDownload(initialBlobUrl, finalFileName);
+            return;
+        }
 
-            try {
-                loadingText.innerText = "PDF를 생성 중입니다...";
-                overlay.style.display = 'flex';
-                downloadBtn.disabled = true;
+        try {
+            loadingText.innerText = "PDF를 생성 중입니다...";
+            overlay.style.display = 'flex';
+            downloadBtn.disabled = true;
 
-                const newOptions = { 
-                    ...baseOptions, 
-                    marginTop: mTop, marginBottom: mBot, 
-                    marginLeft: mLeft, marginRight: mRight 
-                };
+            const newOptions = { 
+                ...baseOptions, 
+                marginTop: mTop, marginBottom: mBot, 
+                marginLeft: mLeft, marginRight: mRight,
+                pageWidth: pWidth
+            };
 
-                const result = await processConversion(newOptions);
-                triggerDownload(result.downloadUrl, result.fileName);
-            } finally {
-                overlay.style.display = 'none';
-                downloadBtn.disabled = false;
-            }
-        });
+            const result = await processConversion(newOptions);
+            triggerDownload(result.downloadUrl, result.fileName);
+        } finally {
+            overlay.style.display = 'none';
+            downloadBtn.disabled = false;
+        }
+    });
 
         function triggerDownload(url, filename) {
             const a = document.createElement('a');

@@ -23,7 +23,8 @@ const convertSchema = Joi.object({
     marginTop: Joi.number().default(0),
     marginBottom: Joi.number().default(0),
     marginLeft: Joi.number().default(0),
-    marginRight: Joi.number().default(0)    
+    marginRight: Joi.number().default(0),
+    pageWidth: Joi.number().min(300).max(5000).default(1080).optional() // 너비 스키마 추가
 });
 
 router.post('/convert-url', convertLimiter, async (req, res) => {
@@ -45,7 +46,8 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
                 marginTop: value.marginTop,
                 marginBottom: value.marginBottom,
                 marginLeft: value.marginLeft,
-                marginRight: value.marginRight
+                marginRight: value.marginRight,
+                pageWidth: value.pageWidth // 작업 옵션에 너비 추가
             }
         }, {
             attempts: 3, // 최대 3회 재시도
