@@ -1,57 +1,94 @@
+// tests/unit/pdfService.test.js
 const { Readable } = require('stream');
-
 const pdfService = require('../../src/services/pdfService');
+const browserPool = require('../../src/utils/browserPool');
 
-describe('PdfService 동시성 제어 및 큐(Queue) 단위 테스트', () => {
+// browserPool 모듈 자체를 Mocking 하여 풀(Pool)의 동작을 추적
+jest.mock('../../src/utils/browserPool', () => ({
+    acquire: jest.fn(),
+    release: jest.fn(),
+    drain: jest.fn(),
+    clear: jest.fn()
+}));
+
+describe('PdfService 동시성 및 자원 풀(Pool) 관리 단위 테스트', () => {
+    let mockPage;
+    let mockBrowser;
+
     beforeEach(() => {
-        // 각 테스트 전 상태 초기화
-        pdfService.activeRequests = 0;
-        pdfService.queue = [];
+        jest.clearAllMocks(); // 각 테스트 전 Mock 초기화
+
+        // Puppeteer Page Mock
+        mockPage = {
+            setRequestInterception: jest.fn().mockResolvedValue(),
+            on: jest.fn(),
+            setDefaultNavigationTimeout: jest.fn(),
+            setUserAgent: jest.fn().mockResolvedValue(),
+            setViewport: jest.fn().mockResolvedValue(),
+            goto: jest.fn().mockResolvedValue(),
+            evaluate: jest.fn().mockResolvedValue({
+                height: 1000, width: 800, padTop: 0, padBottom: 0, padLeft: 0, padRight: 0, scale: 1
+            }),
+            createPDFStream: jest.fn().mockImplementation(async () => {
+                return new ReadableStream({
+                    start(controller) {
+                        controller.close();
+                    }
+                });
+            }),
+            close: jest.fn().mockResolvedValue(),
+        };
+
+        // Puppeteer Browser Mock
+        mockBrowser = {
+            newPage: jest.fn().mockResolvedValue(mockPage),
+            close: jest.fn(),
+        };
     });
 
-    test('최대 동시성(MAX_CONCURRENCY) 제한 내에서는 작업이 즉시 실행되어야 한다', async () => {
-        const mockTask = jest.fn().mockResolvedValue('success');
-        const result = await pdfService.executeTask(mockTask);
+    test('browserPool을 통해 브라우저를 할당받아 PDF 작업을 수행해야 한다', async () => {
+        // acquire 호출 시 mockBrowser 반환
+        browserPool.acquire.mockResolvedValue(mockBrowser);
 
-        expect(result).toBe('success');
-        expect(mockTask).toHaveBeenCalledTimes(1);
-        expect(pdfService.activeRequests).toBe(0); // 작업 완료 후 감소 검증
+        const options = { includeBanner: false, includeTitle: false, includeTags: false, includeDiscussion: false };
+        const result = await pdfService.generatePdf('https://notion.so/test', options);
+
+        // 자원 획득 확인
+        expect(browserPool.acquire).toHaveBeenCalledTimes(1);
+        expect(mockBrowser.newPage).toHaveBeenCalledTimes(1);
+        expect(mockPage.createPDFStream).toHaveBeenCalledTimes(1);
+        expect(result.stream).toBeInstanceOf(Readable);
     });
 
-    test('최대 동시성을 초과하는 작업 요청은 큐(Queue)에 대기해야 한다', async () => {
-        // MAX_CONCURRENCY가 2이므로, 고의로 지연되는 작업 2개를 먼저 실행
-        let resolveTask1, resolveTask2;
-        const task1 = jest.fn().mockImplementation(() => new Promise(r => resolveTask1 = r));
-        const task2 = jest.fn().mockImplementation(() => new Promise(r => resolveTask2 = r));
+    test('다중 요청 발생 시 browserPool.acquire가 요청 수만큼 호출되어 대기열 관리를 풀(Pool)에 위임해야 한다', async () => {
+        browserPool.acquire.mockResolvedValue(mockBrowser);
+
+        const options = {};
         
-        // task3는 실행 즉시 완료되는 작업으로 모킹
-        const task3 = jest.fn().mockResolvedValue('task3 complete');
+        // 3개의 요청을 동시에 실행 (이때 내부적으로 generic-pool이 동시성 한도에 맞춰 큐를 관리함)
+        await Promise.all([
+            pdfService.generatePdf('https://www.notion.so/cloudier338/HARP-Hierarchical-Representation-Learning-for-Networks-288fc609de7380138769d66282234ec8', options),
+            pdfService.generatePdf('https://www.notion.so/cloudier338/HARP-Hierarchical-Representation-Learning-for-Networks-288fc609de7380138769d66282234ec8', options),
+            pdfService.generatePdf('https://www.notion.so/cloudier338/HARP-Hierarchical-Representation-Learning-for-Networks-288fc609de7380138769d66282234ec8', options)
+        ]);
 
-        pdfService.executeTask(task1);
-        pdfService.executeTask(task2);
-
-        expect(pdfService.activeRequests).toBe(2);
-        expect(pdfService.queue.length).toBe(0);
-
-        // 3번째 작업 요청 (큐에 적재 확인)
-        const promise3 = pdfService.executeTask(task3);
-
-        expect(pdfService.activeRequests).toBe(2);
-        expect(pdfService.queue.length).toBe(1);
-        expect(task3).not.toHaveBeenCalled();
-
-        // 첫 번째 작업 완료 처리
-        resolveTask1('task1 complete');
-        
-        // 비동기 작업(마이크로태스크 큐) 처리를 위해 잠시 대기
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        // [수정된 부분] 
-        // 큐에 있던 task3가 꺼내져 실행되었고 즉시 완료되었으므로,
-        // 현재 실행 중인 작업은 task2 1개만 남아있어야 합니다.
-        expect(pdfService.activeRequests).toBe(1);
-        expect(pdfService.queue.length).toBe(0);
-        expect(task3).toHaveBeenCalledTimes(1);
+        // 브라우저 할당 요청이 정확히 3번 이루어졌는지 검증
+        expect(browserPool.acquire).toHaveBeenCalledTimes(3);
+        expect(mockBrowser.newPage).toHaveBeenCalledTimes(3);
     });
-    
+
+    test('작업 중 에러 발생 시 메모리 누수 방지를 위해 브라우저 자원이 정상적으로 반환(release)되어야 한다', async () => {
+        browserPool.acquire.mockResolvedValue(mockBrowser);
+        
+        // 페이지 이동(goto) 중 고의로 에러 발생
+        mockPage.goto.mockRejectedValue(new Error('Navigation timeout'));
+
+        await expect(pdfService.generatePdf('https://www.notion.so/cloudier338/HARP-Hierarchical-Representation-Learning-for-Networks-288fc609de7380138769d66282234ec8', {}))
+            .rejects.toThrow('Navigation timeout');
+
+        // 에러가 발생하여 catch 블록으로 빠지더라도 release가 호출되었는지 검증
+        expect(mockPage.close).toHaveBeenCalledTimes(1);
+        expect(browserPool.release).toHaveBeenCalledWith(mockBrowser);
+        expect(browserPool.release).toHaveBeenCalledTimes(1);
+    });
 });
