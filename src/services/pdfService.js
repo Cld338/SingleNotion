@@ -75,42 +75,41 @@ class PdfService {
                     }, 50);
                 });
 
-                await new Promise(async (resolve) => {
-                    // 1. 문서 내 모든 웹 폰트 로딩 대기 (KaTeX 수학 기호 폰트 포함)
+                async function waitForVisualComplete() {
+                    console.time("VisualComplete");
+
+                    // 1. 웹 폰트 로딩 대기 (FOIT/FOUT 방지)
+                    // 모든 폰트가 로드되거나 실패할 때까지 기다립니다.
                     await document.fonts.ready;
 
-                    let maxAttempts = 50; // 최대 10초 대기
-                    let attempts = 0;
-                    let previousKatexCount = -1;
-                    let stableCount = 0;
-
-                    const checkResources = () => {
-                        attempts++;
+                    // 2. 이미지 로딩 및 디코딩 대기
+                    // 단순히 로드된 상태가 아니라, 브라우저가 픽셀을 그릴 준비(Decode)가 되었는지 확인합니다.
+                    const images = Array.from(document.querySelectorAll('img'));
+                    const imagePromises = images.map(img => {
+                        // 소스가 없거나 이미 디코딩에 실패한 경우 제외
+                        if (!img.src) return Promise.resolve();
                         
-                        // 2. 이미지 로딩 완료 확인
-                        const images = Array.from(document.images);
-                        const allImagesLoaded = images.every(img => img.complete);
+                        // img.decode()는 이미지가 메모리에 로드되고 픽셀 데이터가 준비되면 resolve됩니다.
+                        return img.decode().catch(err => {
+                        console.warn(`이미지 디코딩 실패: ${img.src}`, err);
+                        });
+                    });
+                    
+                    await Promise.all(imagePromises);
 
-                        // 3. KaTeX 렌더링 안정화 확인 (DOM 내 개수 변화 추적)
-                        const currentKatexCount = document.querySelectorAll('.katex-mathml').length;
-                        if (currentKatexCount === previousKatexCount) {
-                            stableCount++;
-                        } else {
-                            stableCount = 0; // 개수가 변했다면 렌더링 중이므로 카운트 초기화
-                            previousKatexCount = currentKatexCount;
-                        }
-
-                        // 이미지가 모두 로드되었고, KaTeX 요소 개수가 3회(약 600ms) 연속 변동이 없으면 렌더링 완료로 간주
-                        const isKatexStable = stableCount >= 3;
-
-                        if ((allImagesLoaded && isKatexStable) || attempts >= maxAttempts) {
-                            setTimeout(resolve, 500); // 최종 레이아웃 안정을 위한 짧은 대기 후 종료
-                        } else {
-                            setTimeout(checkResources, 200);
-                        }
-                    };
-                    checkResources();
-                });
+                    // 3. 브라우저 페인팅 사이클 대기
+                    // 리소스가 준비되어도 브라우저가 화면에 실제로 그리는 시간이 필요합니다.
+                    // Double requestAnimationFrame은 레이아웃 계산과 실제 페인트를 보장하는 트릭입니다.
+                    return new Promise(resolve => {
+                        requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            console.timeEnd("VisualComplete");
+                            resolve(true);
+                        });
+                        });
+                    });
+                    }
+                await waitForVisualComplete();
 
                 // C. 레이아웃 요소 크기 고정 (Freeze)
                 let freezeCSS = "";
@@ -137,8 +136,6 @@ class PdfService {
                         max-width: ${detectedWidth}px !important;
                         min-width: ${detectedWidth}px !important;
                     }
-
-                    
 
                     .notion-sidebar-container, 
                     .notion-topbar, 
@@ -194,11 +191,13 @@ class PdfService {
                         padding-left: ${padLeft}px !important; 
                         padding-right: ${padRight}px !important;
                     }
-                    .katex-mathml {
+                    .katex-mathml,
+                    .katex-html + .katex-mathml,
+                    .katex-display .katex-mathml,
+                    .katex > .katex-mathml,
+                    .katex-html .annotation {
                         display: none !important;
                     } 
-
-                    
                 `;
 
                 if (!includeTitle) dynamicStyles += `h1, .notion-page-block:has(h1) { display: none !important; }`;
@@ -208,7 +207,7 @@ class PdfService {
 
                 const styleTag = document.createElement('style');
                 styleTag.id = 'sn-pdf-style';
-                styleTag.innerHTML = dynamicStyles + freezeCSS;
+                styleTag.innerHTML = dynamicStyles + freezeCSS; 
                 document.head.appendChild(styleTag);
 
                 // E. 공백 및 개행 처리
