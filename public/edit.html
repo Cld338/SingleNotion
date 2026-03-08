@@ -419,7 +419,12 @@
             const scale = viewerScale.value;
             scaleValue.innerText = `${scale}%`;
             previewPage.style.maxWidth = `${(850 * scale) / 100}px`;
-            requestAnimationFrame(updatePreviewMargins);
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+            }
+            
+            // 새로운 애니메이션 프레임 예약
+            rafId = requestAnimationFrame(updatePreviewMargins);
         });
 
         async function processConversion(options) {
@@ -476,7 +481,7 @@
             pdfBaseWidth = page.getViewport({ scale: 1 }).width;
 
             const viewport = page.getViewport({ scale: renderScale });
-            const context = canvas.getContext('2d');
+            const context = canvas.getContext('2d', { willReadFrequently: true });
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
@@ -505,6 +510,7 @@
                     
                     pWidthInput.min = minW;
                     pWidthInput.max = maxW;
+                    pWidthInput.value = result.detectedWidth
                     pWidthInput.title = `가능 범위: ${minW}px ~ ${maxW}px (기준 너비: ${result.detectedWidth}px)`;
                     
                     let currentVal = parseInt(pWidthInput.value);
