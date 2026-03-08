@@ -32,14 +32,14 @@ class PdfService {
             });
 
             page.setDefaultNavigationTimeout(120000);
-            const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = options;
+            const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth, screenshotPath } = options;
             
             
             logger.info(`Margin - Top: ${marginTop}, Bottom: ${marginBottom}, Left: ${marginLeft}, Right: ${marginRight}`);
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
             
             // 1. 초기 뷰포트를 충분히 넓게 설정하여 데스크톱 레이아웃 유도
-            await page.setViewport({ width: 2460, height: 1000 });
+            await page.setViewport({ width: 3000, height: 1000 });
 
             await page.goto(url, { waitUntil: 'networkidle0' });
 
@@ -49,7 +49,7 @@ class PdfService {
 
                 // A. 너비 자동 감지 (popup.js 로직)
                 const contentEl = document.querySelector('.notion-page-content');
-                const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) : 1080;
+                const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
 
                 const scale = pageWidth ? (pageWidth / detectedWidth) : 1;
 
@@ -236,7 +236,7 @@ class PdfService {
                 if (contentHeight < document.body.scrollHeight) contentHeight = document.body.scrollHeight;
                 
                 return {
-                    height: Math.ceil(contentHeight) + 100,
+                    height: Math.ceil(contentHeight),
                     width: detectedWidth,
                     padTop: padTop,
                     padBottom: padBottom,
@@ -249,16 +249,58 @@ class PdfService {
             logger.info(`Calculated scale: ${dimensions.scale}`);
 
             // 2. 계산된 높이와 너비로 뷰포트 최종 조정
-            const finalHeight = Math.ceil(dimensions.height + 100);
+            const finalHeight = Math.ceil(dimensions.height);
             const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
             
-            await page.setViewport({ width: finalWidth + 100, height: finalHeight });
+            await page.setViewport({ width: finalWidth + 1000, height: finalHeight });
             
             await new Promise(resolve => setTimeout(resolve, 3000));
 
             const scale = dimensions.scale;
             const pdfWidth = finalWidth * scale;
             const pdfHeight = finalHeight * scale;
+            
+            if (options.screenshotPath) {
+                // 브라우저 컨텍스트에서 .layout-content 요소들의 전체 영역(Bounding Box) 계산
+                const boundingBox = await page.evaluate(() => {
+                    const elements = Array.from(document.querySelectorAll('.layout-content, .layout-full'));
+                    if (elements.length === 0) return null;
+
+                    let minX = Infinity;
+                    let minY = Infinity;
+                    let maxX = -Infinity;
+                    let maxY = -Infinity;
+
+                    elements.forEach(el => {
+                        const rect = el.getBoundingClientRect();
+                        // 스크롤 위치를 보정한 절대 좌표 계산
+                        const x = rect.left + window.scrollX;
+                        const y = rect.top + window.scrollY;
+                        
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        if (x + rect.width > maxX) maxX = x + rect.width;
+                        if (y + rect.height > maxY) maxY = y + rect.height;
+                    });
+                    return {
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY
+                    };
+                });
+
+                if (boundingBox) {
+                    // 계산된 전체 영역만 지정하여 스크린샷 캡처
+                    await page.screenshot({
+                        path: options.screenshotPath,
+                        clip: boundingBox
+                    });
+                } else {
+                    // 요소를 찾지 못했을 경우의 대비책
+                    await page.screenshot({ path: options.screenshotPath, fullPage: true });
+                }
+            }
 
             // 3. PDF 생성 (Extension의 Page.printToPDF 설정 반영)
             const pdfWebStream = await page.createPDFStream({

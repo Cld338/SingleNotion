@@ -12,7 +12,7 @@ const factory = {
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--font-render-hinting=none',
+                // '--font-render-hinting=none',
                 '--disable-extensions'
             ],
             timeout: 0
