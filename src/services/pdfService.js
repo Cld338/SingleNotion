@@ -109,6 +109,8 @@ class PdfService {
                         });
                     });
                     }
+
+                    
                 await waitForVisualComplete();
 
                 // C. 레이아웃 요소 크기 고정 (Freeze)
@@ -192,10 +194,9 @@ class PdfService {
                         padding-right: ${padRight}px !important;
                     }
                     .katex-mathml,
-                    .katex-html + .katex-mathml,
                     .katex-display .katex-mathml,
                     .katex > .katex-mathml,
-                    .katex-html .annotation {
+                    .annotation {
                         display: none !important;
                     } 
                 `;

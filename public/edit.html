@@ -358,6 +358,8 @@
         let initialBlobUrl = null;
         let finalFileName = 'notion_page.pdf';
         let pdfBaseWidth = 1;
+        let loadedPageWidth = baseOptions.pageWidth;
+        let rafId = null;
 
         const overlay = document.getElementById('loadingOverlay');
         const loadingText = document.getElementById('loadingText');
@@ -502,8 +504,9 @@
                 initialBlobUrl = URL.createObjectURL(blob);
                 finalFileName = result.fileName || 'notion_page.pdf';
                 
-                // 추가: 스케일 0.1 ~ 2.0 범위에 따른 입력 제한 설정
                 if (result.detectedWidth) {
+                    loadedPageWidth = result.detectedWidth; // 감지된 너비 상태 업데이트
+
                     const minW = Math.ceil(result.detectedWidth * 0.1);
                     const maxW = Math.floor(result.detectedWidth * 2.0);
                     const pWidthInput = document.getElementById('pageWidth');
@@ -534,7 +537,6 @@
             const pWidthInput = document.getElementById('pageWidth');
             let pWidth = parseInt(pWidthInput.value);
 
-            // 추가: 요청 전 클라이언트 단에서 너비 유효성 한 번 더 검증
             const minW = parseInt(pWidthInput.min);
             const maxW = parseInt(pWidthInput.max);
             
@@ -544,7 +546,7 @@
                 return; 
             }
 
-            if (mTop === 0 && mBot === 0 && mLeft === 0 && mRight === 0 && pWidth === baseOptions.pageWidth && initialBlobUrl) {
+            if (mTop === 0 && mBot === 0 && mLeft === 0 && mRight === 0 && pWidth === loadedPageWidth && initialBlobUrl) {
                 triggerDownload(initialBlobUrl, finalFileName);
                 return;
             }
