@@ -59,22 +59,6 @@ class PdfService {
                 const padLeft = (Number(marginLeft) || 0) / scale;
                 const padRight = (Number(marginRight) || 0) / scale;
 
-                // // B. Lazy 로딩 해제 및 이미지 로딩 보장(스크롤)
-                // await new Promise((resolve) => {
-                //     let totalHeight = 0;
-                //     const distance = 800;
-                //     const timer = setInterval(() => {
-                //         const scrollHeight = document.body.scrollHeight;
-                //         window.scrollBy(0, distance);
-                //         totalHeight += distance;
-                //         if (totalHeight >= scrollHeight + 1000) {
-                //             clearInterval(timer);
-                //             window.scrollTo(0, 0);
-                //             resolve();
-                //         }
-                //     }, 50);
-                // });
-
                 async function waitForVisualComplete() {
                     console.time("VisualComplete");
 
