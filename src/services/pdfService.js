@@ -4,6 +4,223 @@ const browserPool = require('../utils/browserPool');
 const { log } = require('console');
 
 class PdfService {
+    // 상대 경로를 절대 경로로 변환
+    convertRelativeToAbsolutePaths(html, baseUrl) {
+        try {
+            const parser = new URL(baseUrl);
+            const baseOrigin = parser.origin;
+
+            // HTML을 정규식으로 처리하여 상대 경로 변환
+            let processedHtml = html;
+
+            // src 속성 변환 (이미지, 스크립트, iframe 등)
+            processedHtml = processedHtml.replace(
+                /(?:src|href)=["'](?!(?:http|https|data:|\/\/))([^"']+)["']/gi,
+                (match, path) => {
+                    try {
+                        let resolvedUrl;
+                        if (path.startsWith('/')) {
+                            // 절대 경로(/로 시작): baseOrigin + path
+                            resolvedUrl = `${baseOrigin}${path}`;
+                        } else {
+                            // 상대 경로: baseUrl + path
+                            resolvedUrl = new URL(path, baseUrl).href;
+                        }
+                        return match.replace(path, resolvedUrl);
+                    } catch (err) {
+                        logger.warn(`Failed to convert path: ${path}, error: ${err.message}`);
+                        return match;
+                    }
+                }
+            );
+
+            // background-image URL 변환
+            processedHtml = processedHtml.replace(
+                /background-image\s*:\s*url\(["']?(?!(?:http|https|data:|\/\/))([^)'"]+)["']?\)/gi,
+                (match, path) => {
+                    try {
+                        let resolvedUrl;
+                        if (path.startsWith('/')) {
+                            resolvedUrl = `${baseOrigin}${path}`;
+                        } else {
+                            resolvedUrl = new URL(path, baseUrl).href;
+                        }
+                        return match.replace(path, resolvedUrl);
+                    } catch (err) {
+                        logger.warn(`Failed to convert background URL: ${path}`);
+                        return match;
+                    }
+                }
+            );
+
+            // style 속성 내의 url() 변환
+            processedHtml = processedHtml.replace(
+                /style=["']([^"']*)["']/gi,
+                (match, styleContent) => {
+                    let updatedStyle = styleContent.replace(
+                        /url\(["']?(?!(?:http|https|data:|\/\/))([^)'"]+)["']?\)/g,
+                        (urlMatch, path) => {
+                            try {
+                                let resolvedUrl;
+                                if (path.startsWith('/')) {
+                                    resolvedUrl = `${baseOrigin}${path}`;
+                                } else {
+                                    resolvedUrl = new URL(path, baseUrl).href;
+                                }
+                                return `url(${resolvedUrl})`;
+                            } catch (err) {
+                                logger.warn(`Failed to convert style URL: ${path}`);
+                                return urlMatch;
+                            }
+                        }
+                    );
+                    return `style="${updatedStyle}"`;
+                }
+            );
+
+            return processedHtml;
+        } catch (err) {
+            logger.warn(`Error converting relative paths: ${err.message}`);
+            return html;
+        }
+    }
+
+    // 노션 페이지의 콘텐츠 너비 및 HTML 측정 (미리보기용)
+    async getPreviewData(url) {
+        const browser = await browserPool.acquire();
+        let page = null;
+
+        try {
+            page = await browser.newPage();
+
+            // 보안 패치 로직
+            await page.setRequestInterception(true);
+            page.on('request', request => {
+                const reqUrl = request.url().split('?')[0];
+                const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
+
+                if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://') && !reqUrl.startsWith('data:')) {
+                    return request.abort();
+                }
+
+                if (isMainFrame) {
+                    const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(reqUrl);
+                    if (!isNotionDomain) return request.abort();
+                }
+                const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(reqUrl);
+                if (isLocal) return request.abort();
+
+                request.continue();
+            });
+
+            page.setDefaultNavigationTimeout(60000);
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+            await page.setViewport({ width: 3000, height: 1000 });
+            await page.goto(url, { waitUntil: 'networkidle0' });
+
+            // 콘텐츠 너비, HTML 및 필요한 리소스 추출
+            const result = await page.evaluate(() => {
+                const contentEl = document.querySelector('.notion-page-content');
+                const width = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
+                const html = contentEl ? contentEl.innerHTML : '';
+                
+                // 필요한 CSS 및 JS 수집
+                const cssLinks = [];
+                const jsScripts = [];
+                const inlineStyles = [];
+                const inlineScripts = [];
+
+                // 1. 문서의 모든 <link> 태그 수집
+                document.querySelectorAll('link[rel="stylesheet"], link[rel="preload"][as="style"]').forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (href) {
+                        cssLinks.push({
+                            href: href,
+                            media: link.getAttribute('media') || 'all'
+                        });
+                    }
+                });
+
+                // 2. 문서의 모든 <style> 태그 수집 (인라인 스타일)
+                document.querySelectorAll('style').forEach(style => {
+                    if (style.id !== 'sn-pdf-style') { // PDF 생성용 스타일 제외
+                        inlineStyles.push({
+                            id: style.id || '',
+                            content: style.textContent
+                        });
+                    }
+                });
+
+                // 3. 문서의 모든 <script> 태그 수집 (외부 스크립트)
+                document.querySelectorAll('script[src]').forEach(script => {
+                    const src = script.getAttribute('src');
+                    if (src && !src.includes('localhost') && !src.includes('127.0.0.1')) {
+                        jsScripts.push({
+                            src: src,
+                            async: script.hasAttribute('async'),
+                            defer: script.hasAttribute('defer')
+                        });
+                    }
+                });
+
+                return {
+                    detectedWidth: width,
+                    html: html,
+                    resources: {
+                        cssLinks: cssLinks,
+                        jsScripts: jsScripts,
+                        inlineStyles: inlineStyles,
+                        inlineScripts: inlineScripts
+                    }
+                };
+            });
+
+            // 상대 경로를 절대 경로로 변환
+            result.html = this.convertRelativeToAbsolutePaths(result.html, url);
+            
+            // CSS 링크도 절대 경로로 변환
+            result.resources.cssLinks = result.resources.cssLinks.map(css => {
+                try {
+                    const converted = this.convertRelativeToAbsolutePaths(`<link href="${css.href}">`, url);
+                    const match = converted.match(/href="([^"]+)"/);
+                    return {
+                        ...css,
+                        href: match ? match[1] : css.href
+                    };
+                } catch (err) {
+                    logger.warn(`Failed to convert CSS href: ${css.href}`);
+                    return css;
+                }
+            });
+
+            // JS 스크립트도 절대 경로로 변환
+            result.resources.jsScripts = result.resources.jsScripts.map(js => {
+                try {
+                    const converted = this.convertRelativeToAbsolutePaths(`<script src="${js.src}">`, url);
+                    const match = converted.match(/src="([^"]+)"/);
+                    return {
+                        ...js,
+                        src: match ? match[1] : js.src
+                    };
+                } catch (err) {
+                    logger.warn(`Failed to convert JS src: ${js.src}`);
+                    return js;
+                }
+            });
+
+            logger.info(`Preview data collected - Width: ${result.detectedWidth}, CSS: ${result.resources.cssLinks.length}, InlineStyles: ${result.resources.inlineStyles.length}, JS: ${result.resources.jsScripts.length}`);
+
+            return result;
+
+        } catch (err) {
+            logger.error(`Error in getPreviewData: ${err.message}`);
+            throw err;
+        } finally {
+            if (page) await page.close();
+            await browserPool.release(browser);
+        }
+    }
+
     async generatePdf(url, options) {
         const browser = await browserPool.acquire();
         let page = null;
@@ -58,22 +275,6 @@ class PdfService {
                 const padBottom = (Number(marginBottom) || 0) / scale;
                 const padLeft = (Number(marginLeft) || 0) / scale;
                 const padRight = (Number(marginRight) || 0) / scale;
-
-                // // B. Lazy 로딩 해제 및 이미지 로딩 보장(스크롤)
-                // await new Promise((resolve) => {
-                //     let totalHeight = 0;
-                //     const distance = 800;
-                //     const timer = setInterval(() => {
-                //         const scrollHeight = document.body.scrollHeight;
-                //         window.scrollBy(0, distance);
-                //         totalHeight += distance;
-                //         if (totalHeight >= scrollHeight + 1000) {
-                //             clearInterval(timer);
-                //             window.scrollTo(0, 0);
-                //             resolve();
-                //         }
-                //     }, 50);
-                // });
 
                 async function waitForVisualComplete() {
                     console.time("VisualComplete");

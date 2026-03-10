@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Notion | 표준 규격 편집기</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body { background: #f1f5f9; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .editor-header { 
+            height: 60px; background: white; display: flex; align-items: center; 
+            justify-content: space-between; padding: 0 2rem; border-bottom: 1px solid #e2e8f0; 
+        }
+        .main-container { flex: 1; display: flex; overflow: hidden; }
+        
+        /* 왼쪽: 실제 노션 내용이 들어갈 영역 */
+        #notion-viewer { 
+            flex: 1; overflow-y: auto; padding: 40px; display: flex; justify-content: center; 
+            background: #cbd5e1; position: relative;
+        }
+        .notion-frame { 
+            background: white; width: 800px; min-height: 100%; box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            position: relative; padding: 50px;
+        }
+
+        /* A4 페이지 높이 (297mm = 1123px @ 96DPI) */
+        :root {
+            --a4-height: 1123px;
+            --a4-width: 794px;
+            --page-break-color: #6366f1;
+        }
+
+        /* 페이지 분할 지점 스타일 */
+        .page-break-marker {
+            border-top: 3px dashed #6366f1;
+            position: relative;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            pointer-events: none;
+        }
+        .page-break-marker::after {
+            content: "PAGE BREAK";
+            position: absolute; right: 0; top: -12px;
+            background: #6366f1; color: white; font-size: 10px;
+            padding: 2px 6px; border-radius: 4px; font-weight: bold;
+        }
+
+        /* A4 페이지 라인 표시 */
+        .page-break-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent 0%, #6366f1 10%, #6366f1 90%, transparent 100%);
+            pointer-events: none;
+            opacity: 0.4;
+            left: 0;
+        }
+        .page-break-line::after {
+            content: "";
+            position: absolute;
+            width: 1px;
+            height: 20px;
+            background: #6366f1;
+            top: -9px;
+            left: 20px;
+        }
+
+        /* 노션 블록 오버레이 효과 */
+        .notion-selectable-block { 
+            cursor: pointer; 
+            transition: background 0.2s; 
+            position: relative; 
+        }
+        .notion-selectable-block:hover { 
+            background: rgba(99, 102, 241, 0.05); 
+            outline: 2px solid transparent;
+        }
+        .notion-selectable-block.block-has-break::after {
+            content: "";
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #6366f1;
+            border-radius: 2px;
+        }
+        .notion-selectable-block.selected-break {
+            background: rgba(99, 102, 241, 0.1);
+            outline: 2px solid #6366f1;
+            border-radius: 4px;
+        }
+
+        .sidebar { width: 300px; background: white; border-left: 1px solid #e2e8f0; padding: 1.5rem; }
+        .loading-overlay { 
+            position: fixed; inset: 0; background: rgba(255,255,255,0.8); 
+            display: flex; align-items: center; justify-content: center; z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+    <header class="editor-header">
+        <div class="logo">
+            <i class="fa-solid fa-file-pdf" style="color: #6366f1;"></i>
+            <strong style="margin-left: 8px;">Standard Editor</strong>
+        </div>
+        <div class="actions">
+            <span id="format-badge" class="badge">A4</span>
+            <button id="generate-btn" class="submit-btn" style="padding: 8px 16px; font-size: 14px;">
+                PDF 생성하기
+            </button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="notion-viewer">
+            <div id="loading-spinner" class="loading-overlay">
+                <div class="spinner"></div>
+                <p style="margin-left: 15px;">노션 데이터를 불러오는 중...</p>
+            </div>
+            <div id="content-area" class="notion-frame" style="display: none;">
+                <!-- 백엔드에서 받아온 HTML이 여기에 주입됩니다. -->
+            </div>
+        </div>
+
+        <aside class="sidebar">
+            <h3>페이지 설정</h3>
+            <p class="text-muted" style="font-size: 13px; margin-bottom: 1rem;">
+                문서의 블록을 클릭하여 페이지가 나뉠 지점을 선택하세요. 선택된 블록 <b>이후</b>부터 새로운 페이지가 시작됩니다.
+            </p>
+            <div id="break-list">
+                <p style="font-size: 14px; color: #94a3b8;">설정된 분할 지점이 없습니다.</p>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const notionUrl = params.get('url');
+        const format = params.get('format') || 'A4';
+        
+        document.getElementById('format-badge').innerText = format;
+
+        const contentArea = document.getElementById('content-area');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        let selectedBreaks = new Set();
+        let pageHeightPx = 1123; // A4 높이 (297mm @ 96DPI)
+        let contentWidthPx = 1080; // 기본값
+        let viewerScale = 1; // 뷰어 스케일
+
+        // 용지 규격에 따른 페이지 높이 계산
+        function getPageHeight() {
+            const formats = {
+                'A4': 1123,   // 297mm
+                'A3': 1587,   // 420mm
+                'B5': 944,    // 250mm
+                'Letter': 1100 // 11in
+            };
+            return formats[format] || 1123;
+        }
+
+        // 용지 규격에 따른 페이지 너비 계산
+        function getPageWidth() {
+            const formats = {
+                'A4': 794,    // 210mm
+                'A3': 1123,   // 297mm
+                'B5': 709,    // 176mm
+                'Letter': 612 // 8.5in
+            };
+            return formats[format] || 794;
+        }
+
+        pageHeightPx = getPageHeight();
+
+        // A4 페이지 분할선 렌더링
+        function renderPageBreakLines() {
+            const content = contentArea.querySelector('.notion-page-content');
+            if (!content) return;
+
+            // 기존 페이지 라인 제거
+            document.querySelectorAll('.page-break-line').forEach(line => line.remove());
+
+            const contentTop = contentArea.offsetTop;
+            const contentHeight = content.scrollHeight;
+            const scaledPageHeight = pageHeightPx * viewerScale; // 스케일 적용된 높이
+            
+            // 페이지 경계선 그리기
+            for (let pageNum = 1; pageNum * scaledPageHeight < contentHeight * viewerScale + scaledPageHeight; pageNum++) {
+                const lineTop =contentTop + (pageNum * scaledPageHeight);
+                const line = document.createElement('div');
+                line.className = 'page-break-line';
+                line.style.top = lineTop + 'px';
+                line.title = `페이지 ${pageNum + 1} 시작`;
+                contentArea.parentElement.appendChild(line);
+            }
+        }
+
+        // 페이지 분할 미리보기 업데이트
+        function updatePageBreakPreview() {
+            const content = contentArea.querySelector('.notion-page-content');
+            if (!content) return;
+
+            // 기존 마커 제거
+            document.querySelectorAll('.page-break-marker').forEach(marker => marker.remove());
+
+            const blocks = content.children;
+            selectedBreaks.forEach(breakIndex => {
+                if (breakIndex < blocks.length - 1) {
+                    const block = blocks[breakIndex];
+                    const marker = document.createElement('div');
+                    marker.className = 'page-break-marker';
+                    
+                    // 블록 아래에 마커 삽입
+                    block.insertAdjacentElement('afterend', marker);
+                }
+            });
+
+            // 페이지 라인 다시 렌더링
+            renderPageBreakLines();
+        }
+
+        async function init() {
+            try {
+                console.log(`Loading preview for: ${notionUrl}`);
+                const response = await fetch(`/preview-html?url=${encodeURIComponent(notionUrl)}`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                if (!data.html) {
+                    throw new Error('No HTML content received from server');
+                }
+
+                const { html, detectedWidth, resources } = data;
+                
+                // 감지된 너비로 뷰어 스케일 계산
+                contentWidthPx = detectedWidth || 1080;
+                const pageWidthPx = getPageWidth();
+                viewerScale = pageWidthPx / contentWidthPx;
+                
+                console.log(`Notion content width: ${contentWidthPx}px, Page width: ${pageWidthPx}px, Scale: ${viewerScale.toFixed(2)}`);
+
+                // 1. 먼저 CSS 리소스 로드 (HTML 렌더링 전)
+                if (resources && resources.cssLinks) {
+                    console.log(`Loading ${resources.cssLinks.length} CSS files...`);
+                    await loadCSSResources(resources.cssLinks);
+                }
+                
+                if (resources && resources.inlineStyles) {
+                    console.log(`Loading ${resources.inlineStyles.length} inline styles...`);
+                    loadInlineStyles(resources.inlineStyles);
+                }
+
+                // 2. HTML 주입
+                contentArea.innerHTML = html;
+                loadingSpinner.style.display = 'none';
+                contentArea.style.display = 'block';
+
+                // 2.5 클라이언트에서 추가로 상대 경로를 절대 경로로 변환
+                fixRelativePaths(notionUrl);
+
+                // 3. CSS 적용 대기 (리플로우 타이밍)
+                await new Promise(resolve => {
+                    requestAnimationFrame(() => {
+                        setTimeout(resolve, 500);
+                    });
+                });
+
+                // 4. 뷰어 scale 적용
+                applyViewerScale();
+
+                // 5. 상호작용 설정
+                setupInteraction();
+                renderPageBreakLines();
+                
+                // 6. JS 리소스 로드 (마지막 - 선택사항)
+                if (resources && resources.jsScripts) {
+                    console.log(`Loading ${resources.jsScripts.length} JavaScript files...`);
+                    await loadJSResources(resources.jsScripts);
+                }
+                
+                if (resources && resources.inlineScripts) {
+                    console.log(`Executing ${resources.inlineScripts.length} inline scripts...`);
+                    loadInlineScripts(resources.inlineScripts);
+                }
+
+                console.log('Preview loaded successfully');
+
+            } catch (err) {
+                console.error('Error loading preview:', err);
+                alert('노션 내용을 불러오지 못했습니다:\n' + err.message);
+                loadingSpinner.style.display = 'none';
+            }
+        }
+
+        // 외부 CSS 파일 로드
+        async function loadCSSResources(cssLinks) {
+            if (!cssLinks || !Array.isArray(cssLinks)) {
+                console.warn('No CSS links provided');
+                return;
+            }
+            
+            return Promise.all(cssLinks.map(css => {
+                return new Promise((resolve, reject) => {
+                    try {
+                        const link = document.createElement('link');
+                        link.rel = 'stylesheet';
+                        link.href = css.href;
+                        if (css.media) {
+                            link.media = css.media;
+                        }
+                        link.onload = resolve;
+                        link.onerror = () => {
+                            console.warn(`Failed to load CSS: ${css.href}`);
+                            resolve(); // 개별 CSS 로드 실패시에도 진행
+                        };
+                        document.head.appendChild(link);
+                    } catch (err) {
+                        console.warn(`Error loading CSS: ${err.message}`);
+                        resolve();
+                    }
+                });
+            }));
+        }
+
+        // 인라인 스타일 주입
+        function loadInlineStyles(inlineStyles) {
+            if (!inlineStyles || !Array.isArray(inlineStyles)) {
+                return;
+            }
+            
+            inlineStyles.forEach(style => {
+                try {
+                    const styleEl = document.createElement('style');
+                    if (style.id) {
+                        styleEl.id = style.id;
+                    }
+                    styleEl.textContent = style.content;
+                    document.head.appendChild(styleEl);
+                } catch (err) {
+                    console.warn(`Error loading inline style: ${err.message}`);
+                }
+            });
+        }
+
+        // 외부 JS 파일 로드
+        async function loadJSResources(jsScripts) {
+            if (!jsScripts || !Array.isArray(jsScripts)) {
+                return;
+            }
+            
+            // 순차적으로 로드하여 의존성 보장
+            for (const script of jsScripts) {
+                await new Promise((resolve, reject) => {
+                    try {
+                        const scriptEl = document.createElement('script');
+                        scriptEl.src = script.src;
+                        if (script.async) {
+                            scriptEl.async = true;
+                        }
+                        if (script.defer) {
+                            scriptEl.defer = true;
+                        }
+                        scriptEl.onload = resolve;
+                        scriptEl.onerror = () => {
+                            console.warn(`Failed to load script: ${script.src}`);
+                            resolve(); // 개별 스크립트 로드 실패시에도 진행
+                        };
+                        document.body.appendChild(scriptEl);
+                    } catch (err) {
+                        console.warn(`Error loading script: ${err.message}`);
+                        resolve();
+                    }
+                });
+            }
+        }
+
+        // 인라인 스크립트 실행
+        function loadInlineScripts(inlineScripts) {
+            if (!inlineScripts || !Array.isArray(inlineScripts)) {
+                return;
+            }
+            
+            inlineScripts.forEach(script => {
+                try {
+                    const scriptEl = document.createElement('script');
+                    if (script.id) {
+                        scriptEl.id = script.id;
+                    }
+                    scriptEl.textContent = script.content;
+                    document.body.appendChild(scriptEl);
+                } catch (err) {
+                    console.warn(`Failed to execute inline script: ${err.message}`);
+                }
+            });
+        }
+
+        // 뷰어 스케일 적용
+        function applyViewerScale() {
+            const notion = contentArea.querySelector('.notion-frame');
+            if (notion) {
+                notion.style.transform = `scale(${viewerScale})`;
+                notion.style.transformOrigin = 'top center';
+                notion.style.width = `${contentWidthPx}px`;
+            }
+        }
+
+        // 클라이언트에서 상대 경로를 절대 경로로 재처리 (보안 강화)
+        function fixRelativePaths(baseUrl) {
+            try {
+                const parser = new URL(baseUrl);
+                const baseOrigin = parser.origin;
+
+                // 이미지 src 속성 변환
+                contentArea.querySelectorAll('img[src]').forEach(img => {
+                    const src = img.getAttribute('src');
+                    if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('//')) {
+                        try {
+                            if (src.startsWith('/')) {
+                                img.src = `${baseOrigin}${src}`;
+                            } else {
+                                img.src = new URL(src, baseUrl).href;
+                            }
+                        } catch (err) {
+                            console.warn(`Failed to fix image path: ${src}`, err);
+                        }
+                    }
+                });
+
+                // iframe src 속성 변환
+                contentArea.querySelectorAll('iframe[src]').forEach(iframe => {
+                    const src = iframe.getAttribute('src');
+                    if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('//')) {
+                        try {
+                            if (src.startsWith('/')) {
+                                iframe.src = `${baseOrigin}${src}`;
+                            } else {
+                                iframe.src = new URL(src, baseUrl).href;
+                            }
+                        } catch (err) {
+                            console.warn(`Failed to fix iframe path: ${src}`, err);
+                        }
+                    }
+                });
+
+                // 스타일 내 backgroud-image URL 변환
+                contentArea.querySelectorAll('[style*="background"]').forEach(el => {
+                    const style = el.getAttribute('style');
+                    if (style) {
+                        let updatedStyle = style.replace(
+                            /url\(["']?(?!(?:http|data:|\/\/))([^)'"]+)["']?\)/g,
+                            (match, path) => {
+                                try {
+                                    const resolvedUrl = path.startsWith('/') 
+                                        ? `${baseOrigin}${path}` 
+                                        : new URL(path, baseUrl).href;
+                                    return `url(${resolvedUrl})`;
+                                } catch (err) {
+                                    console.warn(`Failed to fix background URL: ${path}`, err);
+                                    return match;
+                                }
+                            }
+                        );
+                        el.setAttribute('style', updatedStyle);
+                    }
+                });
+
+                console.log('Relative paths fixed to absolute paths');
+            } catch (err) {
+                console.warn('Error fixing relative paths:', err);
+            }
+        }
+
+        function setupInteraction() {
+            const content = contentArea.querySelector('.notion-page-content');
+            if (!content) return;
+
+            const blocks = content.children;
+            Array.from(blocks).forEach((block, index) => {
+                block.classList.add('notion-selectable-block');
+                block.dataset.blockIndex = index;
+
+                // 현재 블록이 어느 페이지에 속하는지 계산
+                function getBlockPageInfo() {
+                    const blockTop = block.offsetTop;
+                    const blockHeight = block.offsetHeight;
+                    const blockBottom = blockTop + blockHeight;
+                    
+                    const startPage = Math.floor(blockTop / pageHeightPx);
+                    const endPage = Math.floor((blockBottom - 1) / pageHeightPx);
+                    
+                    return {
+                        startPage,
+                        endPage,
+                        top: blockTop,
+                        bottom: blockBottom,
+                        spansMultiplePages: startPage !== endPage
+                    };
+                }
+
+                block.addEventListener('mouseenter', () => {
+                    const info = getBlockPageInfo();
+                    if (info.spansMultiplePages) {
+                        block.style.outline = '2px solid #fbbf24';
+                        block.title = `페이지 ${info.startPage + 1}~${info.endPage + 1}에 걸쳐 있음`;
+                    } else {
+                        block.title = `페이지 ${info.startPage + 1}`;
+                    }
+                });
+
+                block.addEventListener('mouseleave', () => {
+                    block.style.outline = '';
+                });
+
+                block.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(block.dataset.blockIndex);
+                    
+                    if (selectedBreaks.has(idx)) {
+                        selectedBreaks.delete(idx);
+                        block.classList.remove('selected-break', 'block-has-break');
+                    } else {
+                        selectedBreaks.add(idx);
+                        block.classList.add('selected-break', 'block-has-break');
+                    }
+                    
+                    updateSidebar();
+                    updatePageBreakPreview();
+                });
+            });
+        }
+
+        function updateSidebar() {
+            const list = document.getElementById('break-list');
+            if (selectedBreaks.size === 0) {
+                list.innerHTML = '<p style="font-size: 14px; color: #94a3b8;">설정된 분할 지점이 없습니다.</p>';
+                return;
+            }
+
+            const content = contentArea.querySelector('.notion-page-content');
+            const blocks = content.children;
+            
+            const breaksList = Array.from(selectedBreaks)
+                .map(bIdx => {
+                    const block = blocks[bIdx];
+                    const blockText = block.textContent.substring(0, 30).trim() || `블록 #${parseInt(bIdx) + 1}`;
+                    return `<li style="margin-bottom: 0.8rem; padding: 0.75rem; background: #f8fafc; border-radius: 8px; border-left: 3px solid #6366f1;">
+                        <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">블록 #${parseInt(bIdx) + 1} 뒤에서 분할</div>
+                        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px; word-break: break-word;">"${blockText}..."</div>
+                    </li>`;
+                })
+                .join('');
+            
+            list.innerHTML = `<ul style="list-style: none; padding: 0;">${breaksList}</ul>`;
+        }
+
+        init();
+
+        const generateBtn = document.getElementById('generate-btn');
+        const loadingOverlay = document.getElementById('loading-spinner');
+
+        generateBtn.addEventListener('click', async () => {
+            try {
+                generateBtn.disabled = true;
+                loadingOverlay.style.display = 'flex';
+                document.querySelector('.loading-overlay p').innerText = "PDF 생성 요청 중...";
+
+                const payload = {
+                    url: notionUrl,
+                    mode: 'standard',
+                    format: format,
+                    pageBreaks: Array.from(selectedBreaks).map(Number),
+                    includeTitle: params.get('includeTitle') === 'true',
+                    includeBanner: params.get('includeBanner') === 'true',
+                    includeTags: params.get('includeTags') === 'true'
+                };
+
+                const response = await fetch('/convert-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const { jobId } = await response.json();
+                trackJobStatus(jobId);
+
+            } catch (err) {
+                alert('PDF 요청에 실패했습니다.');
+                generateBtn.disabled = false;
+                loadingOverlay.style.display = 'none';
+            }
+        });
+
+        function trackJobStatus(jobId) {
+            const eventSource = new EventSource(`/job-events/${jobId}`);
+            
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.status === 'completed') {
+                    eventSource.close();
+                    window.location.href = `/download/${data.result.fileName}`;
+                    loadingOverlay.style.display = 'none';
+                    generateBtn.disabled = false;
+                } else if (data.status === 'failed') {
+                    eventSource.close();
+                    alert('PDF 생성 중 오류가 발생했습니다: ' + data.error);
+                    loadingOverlay.style.display = 'none';
+                    generateBtn.disabled = false;
+                } else {
+                    document.querySelector('.loading-overlay p').innerText = `변환 진행 중... (${data.status})`;
+                }
+            };
+
+            eventSource.onerror = () => {
+                eventSource.close();
+                alert('상태 확인 중 연결이 끊어졌습니다.');
+                loadingOverlay.style.display = 'none';
+                generateBtn.disabled = false;
+            };
+        }
+
+        // 창 크기 변경 시 페이지 라인 업데이트
+        window.addEventListener('resize', () => {
+            renderPageBreakLines();
+        });
+    </script>
+</body>
+</html>

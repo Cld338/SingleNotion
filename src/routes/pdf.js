@@ -1,9 +1,11 @@
 const express = require('express');
 const Joi = require('joi');
 const path = require('path');
+const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 const { pdfQueue } = require('../config/queue');
 const logger = require('../utils/logger');
+const pdfService = require('../services/pdfService');
 
 const router = express.Router();
 
@@ -25,6 +27,54 @@ const convertSchema = Joi.object({
     marginLeft: Joi.number().default(0),
     marginRight: Joi.number().default(0),
     pageWidth: Joi.number().min(300).max(5000).default(1080).optional() // 너비 스키마 추가
+});
+
+// 미리보기 HTML 및 너비 정보 제공 엔드포인트
+router.get('/preview-html', async (req, res) => {
+    try {
+        const url = req.query.url;
+        
+        if (!url) {
+            logger.warn('Missing url parameter');
+            return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
+        }
+
+        // URL 유효성 검사
+        try {
+            new URL(url);
+        } catch (err) {
+            logger.warn(`Invalid URL provided: ${url}`);
+            return res.status(400).json({ error: '유효하지 않은 URL입니다.' });
+        }
+
+        logger.info(`Loading preview for URL: ${url}`);
+        
+        // 콘텐츠 너비, HTML 및 리소스 정보 추출
+        const previewData = await pdfService.getPreviewData(url);
+        
+        if (!previewData) {
+            throw new Error('No preview data returned');
+        }
+
+        const { detectedWidth, html, resources } = previewData;
+        
+        logger.info(`Preview loaded - Detected width: ${detectedWidth}px, HTML length: ${html.length}, CSS: ${resources?.cssLinks?.length || 0}, JS: ${resources?.jsScripts?.length || 0}`);
+        
+        res.json({
+            html: html,
+            detectedWidth: detectedWidth,
+            resources: resources || {
+                cssLinks: [],
+                jsScripts: [],
+                inlineStyles: [],
+                inlineScripts: []
+            }
+        });
+
+    } catch (err) {
+        logger.error(`Failed to load preview: ${err.message}`, { stack: err.stack });
+        res.status(500).json({ error: `미리보기를 불러오는 중 오류가 발생했습니다: ${err.message}` });
+    }
 });
 
 router.post('/convert-url', convertLimiter, async (req, res) => {

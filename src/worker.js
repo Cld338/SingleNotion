@@ -13,7 +13,6 @@ const worker = new Worker('pdf-conversion', async (job) => {
     const startTime = performance.now(); // 변환 시작 시간 기록
 
     try {
-        // 기존: const pdfStream = await pdfService.generatePdf(targetUrl, options);
         // 변경: stream과 detectedWidth를 받아옴
         const { stream: pdfStream, detectedWidth } = await pdfService.generatePdf(targetUrl, options);
         
