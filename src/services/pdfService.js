@@ -39,6 +39,22 @@ class PdfService {
                 /background-image\s*:\s*url\s*\(\s*([^)]*)\s*\)/gi,
                 (match, rawPath) => {
                     try {
+                        // 원본 따옴표 여부 및 형식 확인
+                        let hasQuote = false;
+                        let quoteFormat = null; // '"', "'", or '&quot;'
+                        const trimmedRaw = rawPath.trim();
+                        
+                        if (trimmedRaw.startsWith('"')) {
+                            hasQuote = true;
+                            quoteFormat = '"';
+                        } else if (trimmedRaw.startsWith("'")) {
+                            hasQuote = true;
+                            quoteFormat = "'";
+                        } else if (trimmedRaw.startsWith('&quot;')) {
+                            hasQuote = true;
+                            quoteFormat = '&quot;';
+                        }
+                        
                         // 경로에서 공백, 따옴표, 특수 문자 제거
                         let cleanPath = rawPath
                             .trim()
@@ -61,7 +77,17 @@ class PdfService {
                         } else {
                             resolvedUrl = new URL(cleanPath, baseUrl).href;
                         }
-                        return `background-image: url(${resolvedUrl})`;
+                        
+                        // 원본 따옴표 형식으로 복원
+                        if (hasQuote) {
+                            if (quoteFormat === '&quot;') {
+                                return `background-image: url(&quot;${resolvedUrl}&quot;)`;
+                            } else {
+                                return `background-image: url(${quoteFormat}${resolvedUrl}${quoteFormat})`;
+                            }
+                        } else {
+                            return `background-image: url(${resolvedUrl})`;
+                        }
                     } catch (err) {
                         logger.warn(`Failed to convert background URL: ${rawPath}`);
                         return match;
@@ -77,6 +103,22 @@ class PdfService {
                         /url\s*\(\s*([^)]*)\s*\)/g,
                         (urlMatch, rawPath) => {
                             try {
+                                // 원본 따옴표 여부 및 형식 확인
+                                let hasQuote = false;
+                                let quoteFormat = null; // '"', "'", or '&quot;'
+                                const trimmedRaw = rawPath.trim();
+                                
+                                if (trimmedRaw.startsWith('"')) {
+                                    hasQuote = true;
+                                    quoteFormat = '"';
+                                } else if (trimmedRaw.startsWith("'")) {
+                                    hasQuote = true;
+                                    quoteFormat = "'";
+                                } else if (trimmedRaw.startsWith('&quot;')) {
+                                    hasQuote = true;
+                                    quoteFormat = '&quot;';
+                                }
+                                
                                 // 경로에서 공백, 따옴표, 특수 문자 제거
                                 let cleanPath = rawPath
                                     .trim()
@@ -99,7 +141,17 @@ class PdfService {
                                 } else {
                                     resolvedUrl = new URL(cleanPath, baseUrl).href;
                                 }
-                                return `url(${resolvedUrl})`;
+                                
+                                // 원본 따옴표 형식으로 복원
+                                if (hasQuote) {
+                                    if (quoteFormat === '&quot;') {
+                                        return `url(&quot;${resolvedUrl}&quot;)`;
+                                    } else {
+                                        return `url(${quoteFormat}${resolvedUrl}${quoteFormat})`;
+                                    }
+                                } else {
+                                    return `url(${resolvedUrl})`;
+                                }
                             } catch (err) {
                                 logger.warn(`Failed to convert style URL: ${rawPath}`);
                                 return urlMatch;

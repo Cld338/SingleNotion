@@ -82,6 +82,22 @@ const Utils = {
                         /url\s*\(\s*([^)]*)\s*\)/g,
                         (match, rawPath) => {
                             try {
+                                // 원본 따옴표 여부 및 형식 확인
+                                let hasQuote = false;
+                                let quoteFormat = null; // '"', "'", or '&quot;'
+                                const trimmedRaw = rawPath.trim();
+                                
+                                if (trimmedRaw.startsWith('"')) {
+                                    hasQuote = true;
+                                    quoteFormat = '"';
+                                } else if (trimmedRaw.startsWith("'")) {
+                                    hasQuote = true;
+                                    quoteFormat = "'";
+                                } else if (trimmedRaw.startsWith('&quot;')) {
+                                    hasQuote = true;
+                                    quoteFormat = '&quot;';
+                                }
+                                
                                 // 경로에서 공백, 따옴표, 특수 문자 제거
                                 let cleanPath = rawPath
                                     .trim()                              // 양쪽 공백 제거
@@ -102,13 +118,23 @@ const Utils = {
                                     ? `${baseOrigin}${cleanPath}`
                                     : new URL(cleanPath, baseUrl).href;
                                 fixedCount++;
-                                return `url(${resolvedUrl})`;
+                                
+                                // 원본 따옴표 형식으로 복원
+                                if (hasQuote) {
+                                    if (quoteFormat === '&quot;') {
+                                        return `url(&quot;${resolvedUrl}&quot;)`;
+                                    } else {
+                                        return `url(${quoteFormat}${resolvedUrl}${quoteFormat})`;
+                                    }
+                                } else {
+                                    return `url(${resolvedUrl})`;
+                                }
                             } catch (err) {
                                 Logger.warn(`Failed to fix URL: ${rawPath}`, err);
                                 return match;
                             }
                         }
-                    );
+                    );  
                     el.setAttribute('style', updatedStyle);
                 }
             });
