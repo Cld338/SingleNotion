@@ -16,12 +16,15 @@ class StandardEditApp {
         this.generateBtn = document.getElementById('generate-btn');
         this.loadingOverlay = document.getElementById('loading-spinner');
 
+        this.formatSelect = document.getElementById('format-select'); // 추가됨
+
         // State
         this.selectedBreaks = new Set();
         this.pageHeightPx = Utils.getPageHeight(this.format);
         this.contentWidthPx = 1080;
         this.viewerScale = 1;
         this.isPrinting = false; // 추가된 코드
+        
 
         this.init();
     }
@@ -29,7 +32,10 @@ class StandardEditApp {
     async init() {
         try {
             Logger.log(`INIT Starting for URL: ${this.notionUrl}`, 'info');
-            document.getElementById('format-badge').innerText = this.format;
+            // document.getElementById('format-badge').innerText = this.format;
+            if (this.formatSelect) {
+                this.formatSelect.value = this.format;
+            }
 
             const response = await fetch(`/preview-html?url=${encodeURIComponent(this.notionUrl)}`);
 
@@ -111,8 +117,9 @@ class StandardEditApp {
             this.setupInteraction();
 
             // 9. 페이지 구분선 렌더링
-            Logger.log('INIT Rendering page break lines...', 'info');
-            this.renderPageBreakLines();
+            Logger.log('INIT Rendering page layout...', 'info');
+            this.updatePageBreakPreview(); 
+
 
             // 10. DOM 상태 로깅
             Logger.logDomStatus();
@@ -144,53 +151,92 @@ class StandardEditApp {
     }
 
     renderPageBreakLines() {
+        if (this.isPrinting) return;
 
-        if (this.isPrinting) return; // 추가된 코드: 인쇄 중 렌더링 차단
-        // 기존 라인 제거
-        document.querySelectorAll('.page-break-line').forEach(line => line.remove());
-        document.querySelectorAll('.page-number-label').forEach(label => label.remove());
+        // 기존 마커 및 배경 UI 모두 제거
+        document.querySelectorAll('.page-break-line, .page-number-label, .page-break-marker, .page-background').forEach(el => el.remove());
+        
+        const blocks = Array.from(this.contentArea.children).filter(el => el.classList.contains('notion-selectable-block'));
+        
+        // 1. 기존에 시각적으로 부여된 분할용 여백(Margin) 초기화
+        blocks.forEach(block => {
+            if (block.dataset.pushedMargin) {
+                block.style.marginTop = block.dataset.originalMargin || '';
+                delete block.dataset.pushedMargin;
+            }
+            delete block.dataset.isPageStart; // 추가됨: 자동 넘김 마커 초기화
+        });
 
-        const contentHeight = this.contentArea.scrollHeight;
-        const scaledPageHeight = this.pageHeightPx * this.viewerScale;
+        // 2. 뷰어 스케일을 고려한 실제 페이지 높이 계산 (contentWidthPx 기준 좌표계)
+        const virtualPageHeight = this.pageHeightPx / this.viewerScale;
+        const pageGap = 50; // 종이와 종이 사이의 회색 간격(px)
+        const pagePaddingTop = 50; // content-area 상단 패딩
+        
+        // PDF 변환 시 콘텐츠가 밀리는 것을 방지하기 위한 안전 여백(Safety Margin) 추가
+        const printSafetyMargin = 40; 
+        const pagePaddingBottom = 50 + printSafetyMargin; 
+        
+        this.contentArea.style.background = 'transparent';
+        this.contentArea.style.boxShadow = 'none';
+        this.contentArea.style.paddingBottom = '0';
+        
+        let currentPage = 0;
 
-        for (let pageNum = 1; pageNum * scaledPageHeight < contentHeight; pageNum++) {
-            const lineTop = pageNum * scaledPageHeight;
-            const line = document.createElement('div');
-            line.className = 'page-break-line';
-            line.style.position = 'absolute';
-            line.style.top = lineTop + 'px';
-            line.style.left = '0';
-            line.style.right = '0';
-            line.style.width = '100%';
-            line.style.height = '2px';
-            line.style.background = 'linear-gradient(90deg, transparent 0%, #6366f1 10%, #6366f1 90%, transparent 100%)';
-            line.style.pointerEvents = 'none';
-            line.style.opacity = '0.4';
-            line.style.zIndex = '5';
-            line.title = `페이지 ${pageNum + 1} 시작`;
-            this.contentArea.appendChild(line);
+        // 4. 블록 위치를 기반으로 페이지 강제 밀어내기 적용
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            const blockTop = block.offsetTop;
+            const blockHeight = block.offsetHeight;
+            
+            // 사용자 선택 분할 여부 확인
+            const isManualBreak = i > 0 && this.selectedBreaks.has(parseInt(blocks[i - 1].dataset.blockIndex));
+            
+            // 자동 분할 여부 확인
+            const pageTopY = currentPage * (virtualPageHeight + pageGap);
+            const pageBottomY = pageTopY + virtualPageHeight - pagePaddingBottom;
+            
+            // 블록의 끝부분이 조금이라도 경계선을 넘거나 닿으려 하면 안전하게 다음 장으로 넘김
+            const isAutoBreak = (blockTop + blockHeight) > pageBottomY; 
 
-            // 페이지 번호 라벨 추가
-            const label = document.createElement('div');
-            label.className = 'page-number-label';
-            label.style.position = 'absolute';
-            label.style.top = (lineTop - 15) + 'px';
-            label.style.right = '10px';
-            label.style.fontSize = '12px';
-            label.style.fontWeight = 'bold';
-            label.style.color = '#6366f1';
-            label.style.backgroundColor = 'white';
-            label.style.padding = '2px 8px';
-            label.style.borderRadius = '4px';
-            label.style.pointerEvents = 'none';
-            label.style.zIndex = '6';
-            label.textContent = `PAGE ${pageNum + 1}`;
-            this.contentArea.appendChild(label);
+            if (isManualBreak || isAutoBreak) {
+                currentPage++;
+
+                block.dataset.isPageStart = 'true';
+                
+                // 다음 페이지가 시작될 정확한 Y 좌표
+                const nextTargetY = currentPage * (virtualPageHeight + pageGap) + pagePaddingTop;
+                const pushAmount = nextTargetY - blockTop;
+                
+                // 해당 블록에 마진을 주어 다음 종이 위치로 텍스트를 밀어냄
+                if (pushAmount > 0) {
+                    block.dataset.originalMargin = block.style.marginTop;
+                    block.dataset.pushedMargin = 'true';
+                    block.style.marginTop = `${pushAmount}px`;
+                }
+            }
         }
 
-        // 마지막 페이지의 시작
-        const totalPages = Math.ceil(contentHeight / scaledPageHeight);
-        this.logPageBreakInfo(totalPages, scaledPageHeight);
+        const totalPages = currentPage + 1;
+
+        // 5. 계산된 전체 높이를 기반으로 개별 종이 배경(A4) 렌더링
+        for (let pageNum = 0; pageNum < totalPages; pageNum++) {
+            const pageTop = pageNum * (virtualPageHeight + pageGap);
+            
+            const pageBg = document.createElement('div');
+            pageBg.className = 'page-background';
+            pageBg.style.position = 'absolute';
+            pageBg.style.top = `${pageTop}px`;
+            pageBg.style.left = '0';
+            pageBg.style.width = '100%';
+            pageBg.style.height = `${virtualPageHeight}px`;
+            pageBg.style.background = 'white';
+            pageBg.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.15)';
+            pageBg.style.zIndex = '-1';
+            
+            this.contentArea.appendChild(pageBg);
+        }
+
+        this.logPageBreakInfo(totalPages, virtualPageHeight);
     }
 
     logPageBreakInfo(totalPages, scaledPageHeight) {
@@ -249,30 +295,32 @@ class StandardEditApp {
     }
 
     updatePageBreakPreview() {
-        if (!this.contentArea || this.isPrinting) return; // 추가된 코드
+        if (!this.contentArea || this.isPrinting) return;
 
-        // 기존 마커 제거
+        // 1. 블록들의 물리적 배치를 먼저 업데이트 (마진 변경 적용)
+        this.renderPageBreakLines();
+
+        // 2. 업데이트된 위치에 마커 다시 그리기
         document.querySelectorAll('.page-break-marker').forEach(marker => marker.remove());
 
         const blocks = this.contentArea.children;
         this.selectedBreaks.forEach(breakIndex => {
             if (breakIndex < blocks.length - 1) {
                 const block = blocks[breakIndex];
-                // transform 고려하여 위치 계산
-                const relativeTop = (block.offsetTop + block.offsetHeight) * this.viewerScale;
+                
+                // 분할 위치 (밀어내기가 적용된 이후의 정확한 위치)
+                const relativeTop = block.offsetTop + block.offsetHeight;
 
-                // 마커를 배지 형태로 생성 (점선 없음)
                 const marker = document.createElement('div');
                 marker.className = 'page-break-marker';
                 marker.style.position = 'absolute';
                 marker.style.top = (relativeTop - 10) + 'px';
-                marker.style.left = '0';
+                marker.style.left = '-30px'; // 문서 왼쪽 바깥으로 눈에 띄게 빼기
                 marker.style.width = '40px';
                 marker.style.height = '20px';
                 marker.style.background = '#6366f1';
                 marker.style.color = 'white';
-                marker.style.fontSize = '10px';
-                marker.style.fontWeight = 'bold';
+                marker.style.fontSize = '12px';
                 marker.style.display = 'flex';
                 marker.style.alignItems = 'center';
                 marker.style.justifyContent = 'center';
@@ -285,8 +333,6 @@ class StandardEditApp {
                 this.contentArea.appendChild(marker);
             }
         });
-
-        this.renderPageBreakLines();
     }
 
     setupInteraction() {
@@ -344,7 +390,35 @@ class StandardEditApp {
 
     setupEventListeners() {
         this.generateBtn.addEventListener('click', () => this.onGenerateClick());
-        window.addEventListener('resize', () => this.renderPageBreakLines());
+        // 브라우저 리사이즈 시 다시 페이징 처리되도록 변경
+        window.addEventListener('resize', () => this.updatePageBreakPreview());
+
+        // 포맷 변경 이벤트 리스너 추가
+        if (this.formatSelect) {
+            this.formatSelect.addEventListener('change', (e) => this.onFormatChange(e.target.value));
+        }
+
+    }
+
+    onFormatChange(newFormat) {
+        if (this.isPrinting) return;
+        
+        Logger.log(`포맷 변경: ${this.format} -> ${newFormat}`, 'info');
+        this.format = newFormat;
+        
+        // 1. 새로운 규격에 맞춰 높이와 스케일 재계산
+        this.pageHeightPx = Utils.getPageHeight(this.format);
+        const pageWidthPx = Utils.getPageWidth(this.format);
+        this.viewerScale = pageWidthPx / this.contentWidthPx;
+        
+        // 2. URL 파라미터 업데이트 (새로고침 시 선택 유지)
+        const url = new URL(window.location);
+        url.searchParams.set('format', this.format);
+        window.history.replaceState({}, '', url);
+        
+        // 3. 스케일 및 페이지 레이아웃 재적용
+        this.applyViewerScale();
+        this.updatePageBreakPreview();
     }
 
     async onGenerateClick() {
@@ -400,6 +474,30 @@ class StandardEditApp {
             if (!element) {
                 throw new Error('콘텐츠 영역을 찾을 수 없습니다.');
             }
+            this.isPrinting = true;
+            this.generateBtn.disabled = true;
+            this.loadingOverlay.style.display = 'flex';
+            
+            // --- [수정할 부분 1] 인쇄 직전 레이아웃 원상 복구 ---
+            document.querySelectorAll('.page-break-marker, .page-number-label, .page-background').forEach(el => {
+                el.style.display = 'none';
+            });
+
+            // 시각적 페이징을 위해 밀어냈던(Margin) 블록 위치 초기화 및 강제 분할 클래스 부여
+            Array.from(element.children).forEach(block => {
+                if (block.dataset.pushedMargin) {
+                    block.style.marginTop = block.dataset.originalMargin || '';
+                }
+                // 추가됨: 마킹된 블록에 자동 분할 클래스 추가
+                if (block.dataset.isPageStart === 'true') {
+                    block.classList.add('auto-page-break');
+                }
+            });
+
+            // 인쇄 엔진(Print)이 인식할 수 있도록 기존 박스 스타일 복구
+            element.style.background = 'white';
+            element.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.1)';
+            element.style.paddingBottom = '50px';
 
             this.isPrinting = true; // 추가: 리사이즈 이벤트 차단 락(Lock) 설정
 
@@ -478,6 +576,18 @@ class StandardEditApp {
                     span.textContent = text;
                 }
             });
+            // [추가된 부분] 규격별 정확한 물리적 인쇄 사이즈 반환
+            const getPrintPageSize = (format) => {
+                const sizes = {
+                    'A4': '210mm 297mm',
+                    'A3': '297mm 420mm',
+                    'ISO_B5': '176mm 250mm',
+                    'B5_JIS': '182mm 257mm',
+                    'Letter': '8.5in 11in'
+                };
+                return sizes[format] || '210mm 297mm';
+            };
+
             // 3. 인쇄용 CSS 주입 (@media print 포함)
             const styleId = 'sn-print-style';
             let printStyle = document.getElementById(styleId);
@@ -505,7 +615,8 @@ class StandardEditApp {
 
                 @media print {
                     @page {
-                        size: ${this.format} portrait;
+                        /* === 수정된 부분: 정확한 밀리미터 치수로 강제 지정 === */
+                        size: ${getPrintPageSize(this.format)};
                         margin: 0;
                     }
                     body {
@@ -528,13 +639,17 @@ class StandardEditApp {
                         background: transparent !important;
                     }
 
-                    /* 3. 노션의 인쇄용 시스템 폰트 강제화 규칙 무력화 (이전 단계 유지) */
-                    .katex .mathnormal { font-family: 'KaTeX_Math', serif !important; }
+                    /* 3. 노션의 인쇄용 시스템 폰트 강제 무시 */
+                    katex .mathnormal { font-family: 'KaTeX_Math', serif !important; }
                     .katex .mord, .katex .mbin, .katex .mrel, .katex .mopen, .katex .mclose, 
                     .katex .mpunct, .katex .minner, .katex .mop, .katex .msupsub, .katex .mfrac, .katex .sizing { 
                         font-family: 'KaTeX_Main', serif !important; 
                     }
                     .katex .mathcal { font-family: 'KaTeX_Caligraphic', serif !important; }
+                    .katex .mathbb, .katex .mathfrak, .katex .amsrm { font-family: 'KaTeX_AMS', serif !important; }
+                    .katex .size1 { font-family: 'KaTeX_Size1', serif !important; }
+                    .katex .size2 { font-family: 'KaTeX_Size2', serif !important; }
+                    .katex .mathit { font-family: 'KaTeX_Main', serif !important; font-style: italic !important; }
 
                     /* 콘텐츠 영역 외곽 레이아웃 해제 */
                     .main-container {
@@ -554,11 +669,24 @@ class StandardEditApp {
                         width: ${this.contentWidthPx}px !important;
                         margin: 0 auto !important;
                         display: block !important;
+                        zoom: ${this.viewerScale} !important;
                     }
                     
                     .user-page-break {
                         page-break-after: always;
                         break-after: page;
+                    }
+
+                    /* 사용자가 직접 분할한 지점 (그 블록 '뒤'에서 넘김) */
+                    .user-page-break {
+                        page-break-after: always !important;
+                        break-after: page !important;
+                    }
+                    
+                    /* 자동 분할된 지점 (그 블록 '앞'에서 넘김) */
+                    .auto-page-break {
+                        page-break-before: always !important;
+                        break-before: page !important;
                     }
                 }
             `;
@@ -584,21 +712,24 @@ class StandardEditApp {
             window.print();
 
             // 7. 인쇄 후 원래 UI 상태로 복구
-            this.isPrinting = false; // 추가: 락 해제
+            this.isPrinting = false;
             this.generateBtn.disabled = false;
             
-            this.updatePageBreakPreview();
+            // 클래스 제거 시 auto-page-break도 함께 제거
+            Array.from(element.children).forEach(block => {
+                block.classList.remove('auto-page-break');
+            });
             
-            // user-page-break 클래스 제거
             this.selectedBreaks.forEach(breakIndex => {
                 if (breakIndex < blocks.length - 1) {
                     blocks[breakIndex].classList.remove('user-page-break');
                 }
             });
             
-            if (printStyle) {
-                printStyle.remove();
-            }
+            if (printStyle) printStyle.remove();
+
+            // 변경된 부분: 분할된 페이지 UI 다시 계산 후 그리기
+            this.updatePageBreakPreview();
 
             Logger.success('브라우저 인쇄(PDF 생성) 작업 완료');
 

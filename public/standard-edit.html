@@ -15,8 +15,14 @@
             <i class="fa-solid fa-file-pdf" style="color: #6366f1;"></i>
             <strong style="margin-left: 8px;">Standard Editor</strong>
         </div>
-        <div class="actions">
-            <span id="format-badge" class="badge">A4</span>
+        <div class="actions" style="display: flex; gap: 10px; align-items: center;">
+            <select id="format-select" class="badge" style="cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; padding: 4px 12px; border-radius: 999px; font-weight: 600; color: #475569; font-size: 13px; outline: none;">
+                <option value="A4">A4</option>
+                <option value="A3">A3</option>
+                <option value="ISO_B5">ISO B5</option>
+                <option value="B5_JIS">B5 (JIS)</option>
+                <option value="Letter">Letter</option>
+            </select>
             <button id="generate-btn" class="submit-btn" style="padding: 8px 16px; font-size: 14px;">
                 PDF 생성하기
             </button>

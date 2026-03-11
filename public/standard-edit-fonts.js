@@ -7,6 +7,7 @@
 
     // 폰트 파일 URL 목록
     const fontUrls = [
+        '/katex/fonts/KaTeX_AMS-Regular.66c67820.woff2',
         '/katex/fonts/KaTeX_Main-Regular.f8a7f19f.woff2',
         '/katex/fonts/KaTeX_Main-Italic.65297062.woff2',
         '/katex/fonts/KaTeX_Math-Italic.d8b7a801.woff2',
@@ -36,6 +37,7 @@
     // 폰트 로드 상태 확인
     if ('fonts' in document) {
         Promise.all([
+            document.fonts.load('12px KaTeX_AMS'), // 추가됨
             document.fonts.load('12px KaTeX_Main'),
             document.fonts.load('12px KaTeX_Math'),
             document.fonts.load('12px KaTeX_Caligraphic'),

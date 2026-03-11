@@ -3,28 +3,30 @@
  */
 
 const Utils = {
-    /**
+/**
      * 용지 규격에 따른 페이지 높이 계산
      */
     getPageHeight(format) {
         const formats = {
-            'A4': 1123,   // 297mm
-            'A3': 1587,   // 420mm
-            'B5': 944,    // 250mm
-            'Letter': 1100 // 11in
+            'A4': 1123,     // 297mm
+            'A3': 1587,     // 420mm
+            'ISO_B5': 945,  // 250mm (국제 표준)
+            'B5_JIS': 971,  // 257mm (한국/일본 표준)
+            'Letter': 1056  // 11in
         };
         return formats[format] || 1123;
     },
 
     /**
-     * 용지 규격에 따른 페이지 너비 계산
+     * 용지 규격에 따른 페이지 너비 계산 (96 DPI 기준)
      */
     getPageWidth(format) {
         const formats = {
-            'A4': 794,    // 210mm
-            'A3': 1123,   // 297mm
-            'B5': 709,    // 176mm
-            'Letter': 612 // 8.5in
+            'A4': 794,      // 210mm
+            'A3': 1123,     // 297mm
+            'ISO_B5': 665,  // 176mm (국제 표준)
+            'B5_JIS': 688,  // 182mm (한국/일본 표준)
+            'Letter': 816   // 8.5in
         };
         return formats[format] || 794;
     },
