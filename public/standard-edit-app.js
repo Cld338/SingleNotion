@@ -391,102 +391,187 @@ class StandardEditApp {
         }
     }
 
-    async generatePdfClient() {
+   async generatePdfClient() {
         try {
             const element = document.getElementById('content-area');
             if (!element) {
                 throw new Error('콘텐츠 영역을 찾을 수 없습니다.');
             }
 
-            // 페이지 분할 표시 숨기기
+            Logger.log('Starting PDF generation based on popup.js logic...', 'info');
+
+            this.generateBtn.disabled = true;
+            this.loadingOverlay.style.display = 'flex';
+            const statusText = document.querySelector('.loading-overlay p');
+            if (statusText) statusText.innerText = "페이지 최적화 및 렌더링 준비 중...";
+
+            // 1. 에디터 UI 요소(페이지 분할 마커 등) 숨기기
             const pageBreakLines = document.querySelectorAll('.page-break-line');
             const pageBreakMarkers = document.querySelectorAll('.page-break-marker');
-
             pageBreakLines.forEach(line => line.style.display = 'none');
             pageBreakMarkers.forEach(marker => marker.style.display = 'none');
 
-            try {
-                // 1. HTML 콘텐츠 추출 (PDF 관련 요소 제거)
-                Logger.log('Extracting HTML content for rendering...', 'info');
-                let html = element.innerHTML;
+            // 2. popup.js를 참고한 DOM 최적화 작업
+            // 이미지 지연 로딩 해제
+            element.querySelectorAll('img[loading="lazy"]').forEach(img => img.removeAttribute('loading'));
 
-                // 2. data-block-index 속성 추가 (분할을 위해 필요)
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = html;
+            let freezeCSS = "";
+            const layoutElements = element.querySelectorAll('.notion-image-block, .notion-asset-wrapper, div[data-block-id][style*="width"]');
+            
+            // 레이아웃을 구성하는 요소들 크기 고정 (Freeze)
+            layoutElements.forEach((el, index) => {
+                const id = `sn-freeze-${index}`;
+                el.dataset.snFreeze = id;
+                const rect = el.getBoundingClientRect();
                 
-                let blockIndex = 0;
-                tempDiv.querySelectorAll('*').forEach(child => {
-                    if (child.parentElement === tempDiv || child.closest('#content-area') === element) {
-                        if (!child.hasAttribute('data-block-index')) {
-                            child.setAttribute('data-block-index', blockIndex++);
-                        }
-                    }
-                });
+                // viewerScale이 적용된 화면 크기를 원래 비율로 보정
+                const actualWidth = rect.width / this.viewerScale;
+                const actualHeight = rect.height / this.viewerScale;
 
-                html = tempDiv.innerHTML;
-
-                // 3. 페이지 분할 정보 준비
-                const pageBreaks = Array.from(this.selectedBreaks).map(Number);
-                Logger.log(`Prepared pageBreaks: [${pageBreaks.join(', ')}]`, 'info');
-
-                // 4. 서버로 HTML과 페이지 분할 정보 전송
-                Logger.log('Sending HTML to /render-html for PDF generation...', 'info');
+                freezeCSS += `
+                    [data-sn-freeze="${id}"] {
+                        width: ${actualWidth}px !important;
+                        max-width: ${actualWidth}px !important;
+                        min-width: ${actualWidth}px !important;
+                `;
                 
-                const filename = `notion-${Date.now()}.pdf`;
-                const payload = {
-                    html: html,
-                    format: this.format,
-                    pageBreaks: pageBreaks,
-                    pageWidth: this.contentWidthPx,
-                    marginTop: 0,
-                    marginBottom: 0,
-                    marginLeft: 0,
-                    marginRight: 0,
-                    filename: filename
-                };
-
-                const response = await fetch('/render-html', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP ${response.status}`);
+                // 이미지 블록의 경우 비율 변형 방지를 위해 높이도 고정
+                if (el.classList.contains('notion-image-block') || el.classList.contains('notion-asset-wrapper')) {
+                    freezeCSS += `
+                        height: ${actualHeight}px !important;
+                        max-height: ${actualHeight}px !important;
+                        min-height: ${actualHeight}px !important;
+                    `;
                 }
+                freezeCSS += `}\n`;
+            });
 
-                Logger.log('PDF generated successfully from server', 'success');
+            // 공백(\u00A0) 및 줄바꿈 보존 처리
+            const spans = element.querySelectorAll('span[data-token-index="0"]');
+            spans.forEach(span => {
+                let text = span.textContent;
+                if (text.includes(" ")) text = text.replace(/ /g, '\u00A0');
+                if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0');
 
-                // 5. PDF 다운로드
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-
-                Logger.success('PDF 생성 및 다운로드 완료');
-                const statusText = document.querySelector('.loading-overlay p');
-                if (statusText) {
-                    statusText.innerText = "PDF 생성 완료!";
+                if (text.includes("\n")) {
+                    const lines = text.split("\n");
+                    span.textContent = lines[0];
+                    let currentSpan = span;
+                    lines.slice(1).forEach(line => {
+                        const br = document.createElement("br");
+                        currentSpan.after(br);
+                        const newSpan = span.cloneNode(false);
+                        newSpan.textContent = line;
+                        br.after(newSpan);
+                        currentSpan = newSpan;
+                    });
+                } else {
+                    span.textContent = text;
                 }
+            });
 
-            } finally {
-                // 페이지 분할 표시 복원
-                pageBreakLines.forEach(line => line.style.display = '');
-                pageBreakMarkers.forEach(marker => marker.style.display = '');
+            // 3. 인쇄용 CSS 주입 (@media print 포함)
+            const styleId = 'sn-print-style';
+            let printStyle = document.getElementById(styleId);
+            if (!printStyle) {
+                printStyle = document.createElement('style');
+                printStyle.id = styleId;
+                document.head.appendChild(printStyle);
             }
 
+            // popup.js의 스타일과 브라우저 인쇄 제어 스타일 병합
+            printStyle.innerHTML = `
+                ${freezeCSS}
+                .notion-code-block, .notion-code-block span {
+                    white-space: pre-wrap !important;
+                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+                }
+
+                @media print {
+                    @page {
+                        size: ${this.format} portrait;
+                        margin: 0;
+                    }
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    /* 사이드바, 헤더 등 인쇄에 불필요한 요소 숨김 */
+                    .editor-header, .sidebar, .loading-overlay {
+                        display: none !important;
+                    }
+                    /* 콘텐츠 영역 외곽 레이아웃 해제 */
+                    .main-container {
+                        display: block !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    #notion-viewer {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: visible !important;
+                        display: block !important;
+                    }
+                    #content-area {
+                        position: relative !important;
+                        transform: none !important; /* 화면 축소 스케일 초기화 */
+                        width: ${this.contentWidthPx}px !important;
+                        margin: 0 auto !important;
+                        display: block !important;
+                    }
+                    /* 사용자가 지정한 분할 지점에 page-break 강제 적용 */
+                    .user-page-break {
+                        page-break-after: always;
+                        break-after: page;
+                    }
+                }
+            `;
+
+            // 4. 사용자가 지정한 페이지 분할(selectedBreaks)을 CSS 클래스로 반영
+            const blocks = element.children;
+            this.selectedBreaks.forEach(breakIndex => {
+                if (breakIndex < blocks.length - 1) {
+                    blocks[breakIndex].classList.add('user-page-break');
+                }
+            });
+
+            // 5. 브라우저 강제 리플로우 및 렌더링 대기 (popup.js와 동일)
+            window.dispatchEvent(new Event('resize'));
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            await new Promise(resolve => setTimeout(resolve, 1500)); // 렌더링 대기
+
+            this.loadingOverlay.style.display = 'none';
+
+            // 6. 브라우저 기본 인쇄 창 호출 ("PDF로 저장" 사용 유도)
+            window.print();
+
+            // 7. 인쇄 후 원래 UI 상태로 복구
+            this.generateBtn.disabled = false;
+            pageBreakLines.forEach(line => line.style.display = '');
+            pageBreakMarkers.forEach(marker => marker.style.display = '');
+            
+            // user-page-break 클래스 제거
+            this.selectedBreaks.forEach(breakIndex => {
+                if (breakIndex < blocks.length - 1) {
+                    blocks[breakIndex].classList.remove('user-page-break');
+                }
+            });
+            
+            if (printStyle) {
+                printStyle.remove();
+            }
+
+            Logger.success('브라우저 인쇄(PDF 생성) 작업 완료');
+
         } catch (err) {
-            Logger.error('PDF 렌더링 오류', err);
-            throw new Error('PDF 생성에 실패했습니다: ' + err.message);
+            this.loadingOverlay.style.display = 'none';
+            this.generateBtn.disabled = false;
+            Logger.error('PDF 준비 오류', err);
+            alert('PDF 준비 중 오류가 발생했습니다: ' + err.message);
         }
     }
-
     trackJobStatus(jobId) {
         const eventSource = new EventSource(`/job-events/${jobId}`);
         const statusText = document.querySelector('.loading-overlay p');
