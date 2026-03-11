@@ -21,6 +21,7 @@ class StandardEditApp {
         this.pageHeightPx = Utils.getPageHeight(this.format);
         this.contentWidthPx = 1080;
         this.viewerScale = 1;
+        this.isPrinting = false; // 추가된 코드
 
         this.init();
     }
@@ -143,6 +144,8 @@ class StandardEditApp {
     }
 
     renderPageBreakLines() {
+
+        if (this.isPrinting) return; // 추가된 코드: 인쇄 중 렌더링 차단
         // 기존 라인 제거
         document.querySelectorAll('.page-break-line').forEach(line => line.remove());
         document.querySelectorAll('.page-number-label').forEach(label => label.remove());
@@ -246,7 +249,7 @@ class StandardEditApp {
     }
 
     updatePageBreakPreview() {
-        if (!this.contentArea) return;
+        if (!this.contentArea || this.isPrinting) return; // 추가된 코드
 
         // 기존 마커 제거
         document.querySelectorAll('.page-break-marker').forEach(marker => marker.remove());
@@ -398,6 +401,8 @@ class StandardEditApp {
                 throw new Error('콘텐츠 영역을 찾을 수 없습니다.');
             }
 
+            this.isPrinting = true; // 추가: 리사이즈 이벤트 차단 락(Lock) 설정
+
             Logger.log('Starting PDF generation based on popup.js logic...', 'info');
 
             this.generateBtn.disabled = true;
@@ -406,10 +411,9 @@ class StandardEditApp {
             if (statusText) statusText.innerText = "페이지 최적화 및 렌더링 준비 중...";
 
             // 1. 에디터 UI 요소(페이지 분할 마커 등) 숨기기
-            const pageBreakLines = document.querySelectorAll('.page-break-line');
-            const pageBreakMarkers = document.querySelectorAll('.page-break-marker');
-            pageBreakLines.forEach(line => line.style.display = 'none');
-            pageBreakMarkers.forEach(marker => marker.style.display = 'none');
+            document.querySelectorAll('.page-break-line, .page-break-marker, .page-number-label').forEach(el => {
+                el.style.display = 'none';
+            });
 
             // 2. popup.js를 참고한 DOM 최적화 작업
             // 이미지 지연 로딩 해제
@@ -449,9 +453,14 @@ class StandardEditApp {
             // 공백(\u00A0) 및 줄바꿈 보존 처리
             const spans = element.querySelectorAll('span[data-token-index="0"]');
             spans.forEach(span => {
+                // 추가된 코드: KaTeX 수식이 포함된 요소는 HTML DOM 구조 파괴를 막기 위해 건너뜀
+                if (span.querySelector('.katex') || span.closest('.katex')) {
+                    return;
+                }
+
                 let text = span.textContent;
                 if (text.includes(" ")) text = text.replace(/ /g, '\u00A0');
-                if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0');
+                if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0');
 
                 if (text.includes("\n")) {
                     const lines = text.split("\n");
@@ -469,7 +478,6 @@ class StandardEditApp {
                     span.textContent = text;
                 }
             });
-
             // 3. 인쇄용 CSS 주입 (@media print 포함)
             const styleId = 'sn-print-style';
             let printStyle = document.getElementById(styleId);
@@ -487,6 +495,14 @@ class StandardEditApp {
                     font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
                 }
 
+                /* KaTeX 수식 중복 렌더링 방지 추가 */
+                .katex-mathml,
+                .katex-display .katex-mathml,
+                .katex > .katex-mathml,
+                .annotation {
+                    display: none !important;
+                }
+
                 @media print {
                     @page {
                         size: ${this.format} portrait;
@@ -498,10 +514,28 @@ class StandardEditApp {
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                     }
-                    /* 사이드바, 헤더 등 인쇄에 불필요한 요소 숨김 */
-                    .editor-header, .sidebar, .loading-overlay {
+                    /* 1. 사이드바, 헤더 및 마커/라벨 등 인쇄에 불필요한 UI 요소 완벽 숨김 */
+                    .editor-header, .sidebar, .loading-overlay,
+                    .page-break-marker, .page-break-line, .page-number-label {
                         display: none !important;
                     }
+                    
+                    /* 2. 블록 선택 시 나타나는 외곽선, 배경색 효과 제거 */
+                    .notion-selectable-block, .selected-break, .block-has-break {
+                        outline: none !important;
+                        border: none !important;
+                        box-shadow: none !important;
+                        background: transparent !important;
+                    }
+
+                    /* 3. 노션의 인쇄용 시스템 폰트 강제화 규칙 무력화 (이전 단계 유지) */
+                    .katex .mathnormal { font-family: 'KaTeX_Math', serif !important; }
+                    .katex .mord, .katex .mbin, .katex .mrel, .katex .mopen, .katex .mclose, 
+                    .katex .mpunct, .katex .minner, .katex .mop, .katex .msupsub, .katex .mfrac, .katex .sizing { 
+                        font-family: 'KaTeX_Main', serif !important; 
+                    }
+                    .katex .mathcal { font-family: 'KaTeX_Caligraphic', serif !important; }
+
                     /* 콘텐츠 영역 외곽 레이아웃 해제 */
                     .main-container {
                         display: block !important;
@@ -516,12 +550,12 @@ class StandardEditApp {
                     }
                     #content-area {
                         position: relative !important;
-                        transform: none !important; /* 화면 축소 스케일 초기화 */
+                        transform: none !important;
                         width: ${this.contentWidthPx}px !important;
                         margin: 0 auto !important;
                         display: block !important;
                     }
-                    /* 사용자가 지정한 분할 지점에 page-break 강제 적용 */
+                    
                     .user-page-break {
                         page-break-after: always;
                         break-after: page;
@@ -539,6 +573,8 @@ class StandardEditApp {
 
             // 5. 브라우저 강제 리플로우 및 렌더링 대기 (popup.js와 동일)
             window.dispatchEvent(new Event('resize'));
+
+            await document.fonts.ready;
             await new Promise(resolve => requestAnimationFrame(resolve));
             await new Promise(resolve => setTimeout(resolve, 1500)); // 렌더링 대기
 
@@ -548,9 +584,10 @@ class StandardEditApp {
             window.print();
 
             // 7. 인쇄 후 원래 UI 상태로 복구
+            this.isPrinting = false; // 추가: 락 해제
             this.generateBtn.disabled = false;
-            pageBreakLines.forEach(line => line.style.display = '');
-            pageBreakMarkers.forEach(marker => marker.style.display = '');
+            
+            this.updatePageBreakPreview();
             
             // user-page-break 클래스 제거
             this.selectedBreaks.forEach(breakIndex => {
