@@ -19,11 +19,13 @@
     </nav>
 
     <div class="main-container">
-        <div id="notion-viewer">
-            <div id="loading-spinner" class="loading-overlay">
+        <div id="loading-spinner" class="loading-overlay" style="display: flex;">
+            <div class="loader-content">
                 <div class="spinner"></div>
-                <p style="margin-left: 15px;">노션 데이터를 불러오는 중...</p>
+                <p class="loading-text" style="margin-left: 15px;">노션 데이터를 불러오는 중...</p>
             </div>
+        </div>
+        <div id="notion-viewer">
             <div id="content-area" style="display: none;">
             </div>
         </div>
