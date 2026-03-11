@@ -104,9 +104,6 @@ class StandardEditApp {
             Logger.log('INIT Injecting HTML...', 'info');
             this.contentArea.innerHTML = html;
 
-            this.loadingSpinner.style.display = 'none';
-            this.contentArea.style.display = 'block';
-
             
 
 
@@ -147,6 +144,9 @@ class StandardEditApp {
             this.setupEventListeners();
 
             Logger.log('INIT ✓ Preview loaded successfully!', 'success');
+
+            this.loadingSpinner.style.display = 'none';
+            this.contentArea.style.display = 'block';
 
         } catch (err) {
             Logger.error('INIT ERROR', err);
@@ -900,6 +900,14 @@ class StandardEditApp {
                     }
                     #content-area > div.notion-selectable.notion-table_of_contents-block.notion-selectable-block.selected-break.block-has-break > div::after {
                         display: none !important;
+                    }
+
+                    .loading-overlay {
+                     z-index: 0 !important;
+                    }
+
+                    .notion-selectable-block.block-has-break::after {
+                        border: none !important;
                     }
 
                 }
