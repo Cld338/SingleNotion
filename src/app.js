@@ -2,6 +2,8 @@
 const helmet = require('helmet');
 const cors = require('cors');
 const path = require('path');
+const axios = require('axios');
+
 require('dotenv').config();
 
 const logger = require('./utils/logger');
@@ -90,6 +92,46 @@ app.get('/sitemap.xml', (req, res) => {
         </urlset>`;
     res.header('Content-Type', 'application/xml');
     res.send(sitemap);
+});
+
+app.get('/proxy-asset', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).send('URL이 필요합니다.');
+
+    try {
+        const parsedUrl = new URL(targetUrl);
+        
+        // 1. 도메인 화이트리스트 검증 (pdfService.js의 로직 활용)
+        const isAllowedDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(targetUrl);
+        
+        if (!isAllowedDomain) {
+            logger.warn(`허용되지 않은 도메인 접근 시도 차단: ${targetUrl}`);
+            return res.status(403).send('허용되지 않은 대상입니다.');
+        }
+
+        // 2. 내부 네트워크(Localhost) 접근 차단 (SSRF 방지)
+        const isLocal = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(parsedUrl.hostname);
+        if (isLocal) {
+            return res.status(403).send('내부 네트워크 접근은 금지되어 있습니다.');
+        }
+
+        const response = await axios.get(targetUrl, {
+            responseType: 'arraybuffer',
+            timeout: 5000, // 무한 대기 방지
+            headers: {
+                'User-Agent': 'Mozilla/5.0 ...'
+            }
+        });
+
+        res.set('Content-Type', response.headers['content-type']);
+        res.set('Access-Control-Allow-Origin', '*'); 
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
+        res.send(response.data);
+        
+    } catch (err) {
+        logger.error(`Proxy Error: ${err.message}`);
+        res.status(500).send('에셋을 불러오지 못했습니다.');
+    }
 });
 
 // 파일 정리 스케줄러 실행

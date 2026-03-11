@@ -21,6 +21,8 @@ class StandardEditApp {
         this.generateBtn = document.getElementById('generate-btn');
         this.loadingOverlay = document.getElementById('loading-spinner');
 
+        this.formatSelect = document.getElementById('format-select');
+
         // State
         this.selectedBreaks = new Set();
         this.pageHeightPx = Utils.getPageHeight(this.format);
@@ -180,7 +182,7 @@ class StandardEditApp {
         const pagePaddingTop = 50; // content-area 상단 패딩
         
         // PDF 변환 시 콘텐츠가 밀리는 것을 방지하기 위한 안전 여백(Safety Margin) 추가
-        const printSafetyMargin = 40; 
+        const printSafetyMargin = 20; 
         const pagePaddingBottom = 50 + printSafetyMargin; 
         
         this.contentArea.style.background = 'transparent';

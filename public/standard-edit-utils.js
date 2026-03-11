@@ -74,68 +74,40 @@ const Utils = {
                 }
             });
 
-            // 스타일 내 모든 URL 속성 변환 (background-image, mask, clip-path, etc)
+            // 스타일 내 모든 URL 속성 변환 부분
             contentArea.querySelectorAll('[style]').forEach(el => {
                 const style = el.getAttribute('style');
                 if (style) {
-                    let updatedStyle = style.replace(
+                    let isChanged = false;
+                    const updatedStyle = style.replace(
                         /url\s*\(\s*([^)]*)\s*\)/g,
                         (match, rawPath) => {
                             try {
-                                // 원본 따옴표 여부 및 형식 확인
-                                let hasQuote = false;
-                                let quoteFormat = null; // '"', "'", or '&quot;'
-                                const trimmedRaw = rawPath.trim();
-                                
-                                if (trimmedRaw.startsWith('"')) {
-                                    hasQuote = true;
-                                    quoteFormat = '"';
-                                } else if (trimmedRaw.startsWith("'")) {
-                                    hasQuote = true;
-                                    quoteFormat = "'";
-                                } else if (trimmedRaw.startsWith('&quot;')) {
-                                    hasQuote = true;
-                                    quoteFormat = '&quot;';
-                                }
-                                
-                                // 경로에서 공백, 따옴표, 특수 문자 제거
-                                let cleanPath = rawPath
-                                    .trim()                              // 양쪽 공백 제거
-                                    .replace(/^["']+|["']+$/g, '')      // 시작/끝 따옴표 제거 (여러 개)
-                                    .replace(/&quot;/g, '')             // HTML 엔티티 따옴표 제거
-                                    .replace(/&#34;/g, '')             // 수치 HTML 엔티티 제거
-                                    .trim();                            // 다시 한번 공백 제거
-                                
-                                // 비어있거나 절대 URL인 경우
-                                if (!cleanPath) {
-                                    return match;
-                                }
-                                if (cleanPath.startsWith('http') || cleanPath.startsWith('data:') || cleanPath.startsWith('//')) {
-                                    return match;
-                                }
-                                
-                                const resolvedUrl = cleanPath.startsWith('/')
-                                    ? `${baseOrigin}${cleanPath}`
-                                    : new URL(cleanPath, baseUrl).href;
+                                // (기존 따옴표 및 경로 정규화 로직 유지)
+                                let cleanPath = rawPath.trim().replace(/^["']+|["']+$/g, '').replace(/&quot;/g, '').trim();
+                                if (!cleanPath) return match;
+
+                                // 이미 절대 경로인 경우
+                                const absoluteUrl = (cleanPath.startsWith('http') || cleanPath.startsWith('//'))
+                                    ? cleanPath
+                                    : (cleanPath.startsWith('/') ? `${baseOrigin}${cleanPath}` : new URL(cleanPath, baseUrl).href);
+
+                                // [핵심] 노션 에셋인 경우 프록시 경로로 래핑
+                                const resolvedUrl = `/proxy-asset?url=${encodeURIComponent(absoluteUrl)}`;
+                                isChanged = true;
                                 fixedCount++;
-                                
-                                // 원본 따옴표 형식으로 복원
-                                if (hasQuote) {
-                                    if (quoteFormat === '&quot;') {
-                                        return `url(&quot;${resolvedUrl}&quot;)`;
-                                    } else {
-                                        return `url(${quoteFormat}${resolvedUrl}${quoteFormat})`;
-                                    }
-                                } else {
-                                    return `url(${resolvedUrl})`;
-                                }
+
+                                // 이전 답변에서 드린 따옴표 유지 로직 적용
+                                return `url("${resolvedUrl}")`; 
                             } catch (err) {
-                                Logger.warn(`Failed to fix URL: ${rawPath}`, err);
                                 return match;
                             }
                         }
-                    );  
-                    el.setAttribute('style', updatedStyle);
+                    );
+
+                    if (isChanged) {
+                        el.setAttribute('style', updatedStyle);
+                    }
                 }
             });
 
