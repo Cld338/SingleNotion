@@ -94,9 +94,9 @@ body {
 
 /* 콘텐츠 영역 (노션 페이지) */
 #content-area {
-    background: white;
+    background: transparent;
+    box-shadow: none;
     width: 800px;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
     position: relative;
     /* padding: 50px; */
     box-sizing: border-box;
@@ -125,6 +125,7 @@ body {
     pointer-events: none;
     z-index: 10;
     user-select: none;
+    display: none !important;
 }
 
 /* A4 페이지 라인 표시 */
@@ -173,27 +174,29 @@ body {
     -moz-user-select: none !important;
     -ms-user-select: none !important;
 }
-
 .notion-selectable-block:hover {
     background: rgba(99, 102, 241, 0.05);
-    outline: 2px solid transparent;
+    outline: 2px solid #cbd5e1; /* 연한 회색 테두리 */
+    border-radius: 4px;
 }
 
+/* 2. 하단 구분선을 회색 점선으로 변경 */
 .notion-selectable-block.block-has-break::after {
     content: "";
     position: absolute;
-    bottom: -10px;
+    bottom: 0px;
     left: 0;
     right: 0;
-    height: 3px;
-    background: #6366f1;
-    border-radius: 2px;
+    height: 0; /* 기존 3px 대신 0으로 변경 */
+    border-bottom: 2px dotted #94a3b8; /* 회색 점선 적용 */
+    background: transparent; /* 기존 보라색 단색 배경 제거 */
 }
 
-.notion-selectable-block.selected-break {
-    background: rgba(99, 102, 241, 0.1);
-    outline: 2px solid #6366f1;
-    border-radius: 4px;
+/* 3. 클릭 후(선택됨) 테두리 및 배경색 제거 */
+.notion-selectable-block.selected-break,
+.notion-selectable-block.selected-break:hover {
+    background: transparent; 
+    outline: none; 
 }
 
 .sidebar {

@@ -182,9 +182,8 @@ class StandardEditApp {
         const printSafetyMargin = 20; 
         const pagePaddingBottom = (margins.bottom / this.viewerScale) + printSafetyMargin; 
         
-        this.contentArea.style.background = 'transparent';
-        this.contentArea.style.boxShadow = 'none';
-        this.contentArea.style.paddingBottom = '0';
+        this.contentArea.style.display = 'flow-root'; 
+        this.contentArea.style.paddingTop = `${Math.max(0.1, pagePaddingTop)}px`;
         // [추가] 첫 번째 페이지의 Top Margin을 위해 contentArea에 패딩 탑 적용
         this.contentArea.style.paddingTop = `${pagePaddingTop}px`;
         
@@ -716,8 +715,9 @@ class StandardEditApp {
                         transform: none !important;
                         width: ${this.contentWidthPx}px !important;
                         margin: 0 auto !important;
-                        display: block !important;
-                        padding: 0 !important; /* [추가] 브라우저 여백과 겹치지 않도록 미리보기 패딩 강제 초기화 */
+                        /* [수정] 패딩 0.1px 및 flow-root 적용하여 마진 이탈 방지 */
+                        padding: 0.1px 0 0 0 !important; 
+                        display: flow-root !important;   
                         zoom: ${this.viewerScale} !important;
                     }
                     
