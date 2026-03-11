@@ -555,10 +555,42 @@ class StandardEditApp {
             this.loadingOverlay.style.display = 'flex';
             
             const statusText = document.querySelector('.loading-overlay .loading-text');
-            if (statusText) statusText.innerText = "PDF 생성 중...";
 
-            // 단일 페이지, 표준 규격 모두 브라우저 인쇄 엔진으로 처리
-            await this.generatePdfClient();
+            // 포맷이 'SINGLE'인 경우 서버 사이드 렌더링(edit 페이지 방식) 사용
+            if (this.format === 'SINGLE') {
+                if (statusText) statusText.innerText = "서버에서 PDF를 생성 중입니다...";
+                
+                const margins = this.getMargins();
+                const options = {
+                    url: this.notionUrl,
+                    includeTitle: document.getElementById('chk-title').checked,
+                    includeBanner: document.getElementById('chk-banner').checked,
+                    includeTags: document.getElementById('chk-tags').checked,
+                    marginTop: margins.top,
+                    marginBottom: margins.bottom,
+                    marginLeft: margins.left,
+                    marginRight: margins.right,
+                    pageWidth: parseInt(document.getElementById('pageWidth').value) || 1080,
+                    mode: 'full' // 서버의 pdfService.generatePdf 로직 사용
+                };
+
+                const response = await fetch('/convert-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(options)
+                });
+
+                const resData = await response.json();
+                if (!response.ok) throw new Error(resData.error || '요청 실패');
+
+                // SSE를 통해 작업 완료 대기
+                await this.trackJobStatus(resData.jobId);
+                
+            } else {
+                // 표준 규격(A4 등)은 기존의 클라이언트 사이드 인쇄 방식 유지
+                if (statusText) statusText.innerText = "PDF 생성 준비 중...";
+                await this.generatePdfClient();
+            }
             
             this.loadingOverlay.style.display = 'none';
             this.generateBtn.disabled = false;
@@ -916,33 +948,37 @@ class StandardEditApp {
         }
     }
     trackJobStatus(jobId) {
-        const eventSource = new EventSource(`/job-events/${jobId}`);
-        const statusText = document.querySelector('.loading-overlay p');
+        return new Promise((resolve, reject) => {
+            const eventSource = new EventSource(`/job-events/${jobId}`);
+            const statusText = document.querySelector('.loading-overlay .loading-text');
 
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
 
-            if (data.status === 'completed') {
+                if (data.status === 'completed') {
+                    eventSource.close();
+                    // 생성된 파일을 다운로드 URL로 트리거
+                    const downloadUrl = `/download/${data.result.fileName}`;
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = data.result.fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    resolve(data.result);
+                } else if (data.status === 'failed' || data.status === 'error') {
+                    eventSource.close();
+                    reject(new Error(data.error || '서버 변환 실패'));
+                } else {
+                    if (statusText) statusText.innerText = `서버 작업 진행 중... (${data.status})`;
+                }
+            };
+
+            eventSource.onerror = () => {
                 eventSource.close();
-                window.location.href = `/download/${data.result.fileName}`;
-                this.loadingOverlay.style.display = 'none';
-                this.generateBtn.disabled = false;
-            } else if (data.status === 'failed') {
-                eventSource.close();
-                alert('PDF 생성 중 오류가 발생했습니다: ' + data.error);
-                this.loadingOverlay.style.display = 'none';
-                this.generateBtn.disabled = false;
-            } else {
-                statusText.innerText = `변환 진행 중... (${data.status})`;
-            }
-        };
-
-        eventSource.onerror = () => {
-            eventSource.close();
-            alert('상태 확인 중 연결이 끊어졌습니다.');
-            this.loadingOverlay.style.display = 'none';
-            this.generateBtn.disabled = false;
-        };
+                reject(new Error('서버와의 연결이 끊어졌습니다.'));
+            };
+        });
     }
 }
 
