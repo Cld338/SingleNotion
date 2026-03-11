@@ -17,8 +17,19 @@ const convertLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+const renderHtmlLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 50, // HTML 렌더링은 더 많이 허용
+    message: { error: '요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 const convertSchema = Joi.object({
     url: Joi.string().uri().required(),
+    mode: Joi.string().valid('standard', 'full').default('full'),
+    format: Joi.string().valid('A4', 'A3', 'B5', 'Letter').default('A4'),
+    pageBreaks: Joi.array().items(Joi.number().min(0)).default([]),
     includeBanner: Joi.boolean().default(false),
     includeTitle: Joi.boolean().default(false),
     includeTags: Joi.boolean().default(false),
@@ -26,7 +37,19 @@ const convertSchema = Joi.object({
     marginBottom: Joi.number().default(0),
     marginLeft: Joi.number().default(0),
     marginRight: Joi.number().default(0),
-    pageWidth: Joi.number().min(300).max(5000).default(1080).optional() // 너비 스키마 추가
+    pageWidth: Joi.number().min(300).max(5000).default(1080).optional()
+});
+
+const renderHtmlSchema = Joi.object({
+    html: Joi.string().required(),
+    format: Joi.string().valid('A4', 'A3', 'B5', 'Letter').default('A4'),
+    pageBreaks: Joi.array().items(Joi.number().min(0)).default([]),
+    marginTop: Joi.number().default(0),
+    marginBottom: Joi.number().default(0),
+    marginLeft: Joi.number().default(0),
+    marginRight: Joi.number().default(0),
+    pageWidth: Joi.number().min(300).max(5000).default(1080),
+    filename: Joi.string().optional()
 });
 
 // 미리보기 HTML 및 너비 정보 제공 엔드포인트
@@ -65,9 +88,7 @@ router.get('/preview-html', async (req, res) => {
             detectedWidth: detectedWidth,
             resources: resources || {
                 cssLinks: [],
-                jsScripts: [],
-                inlineStyles: [],
-                inlineScripts: []
+                inlineStyles: []
             }
         });
 
@@ -90,6 +111,9 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
         const job = await pdfQueue.add('convert', {
             targetUrl: value.url,
             options: { 
+                mode: value.mode,
+                format: value.format,
+                pageBreaks: value.pageBreaks,
                 includeBanner: value.includeBanner,
                 includeTitle: value.includeTitle,
                 includeTags: value.includeTags,
@@ -97,7 +121,7 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
                 marginBottom: value.marginBottom,
                 marginLeft: value.marginLeft,
                 marginRight: value.marginRight,
-                pageWidth: value.pageWidth // 작업 옵션에 너비 추가
+                pageWidth: value.pageWidth
             }
         }, {
             attempts: 5, // 최대 3회 재시도
@@ -222,6 +246,70 @@ router.get('/download/:filename', (req, res) => {
             }
         });
     });
+});
+
+/**
+ * HTML 콘텐츠로부터 직접 PDF 생성 (standard-edit용)
+ * POST /render-html
+ * Body: {
+ *   html: string,
+ *   format: 'A4' | 'A3' | 'B5' | 'Letter',
+ *   pageBreaks: number[],
+ *   marginTop: number,
+ *   marginBottom: number,
+ *   marginLeft: number,
+ *   marginRight: number,
+ *   pageWidth: number,
+ *   filename: string (optional)
+ * }
+ */
+router.post('/render-html', renderHtmlLimiter, async (req, res) => {
+    try {
+        const { error, value } = renderHtmlSchema.validate(req.body);
+        if (error) {
+            logger.warn(`Invalid render-html request: ${error.details[0].message}`);
+            return res.status(400).json({ error: error.details[0].message });
+        }
+
+        logger.info(`Rendering HTML to PDF: format=${value.format}, pageBreaks=${value.pageBreaks.length}, margins=[${value.marginTop}, ${value.marginBottom}, ${value.marginLeft}, ${value.marginRight}]`);
+
+        // PDF 생성
+        const { stream, detectedWidth } = await pdfService.generatePdfFromHtml(
+            value.html,
+            value.format,
+            {
+                pageBreaks: value.pageBreaks,
+                marginTop: value.marginTop,
+                marginBottom: value.marginBottom,
+                marginLeft: value.marginLeft,
+                marginRight: value.marginRight,
+                pageWidth: value.pageWidth
+            }
+        );
+
+        // PDF 스트림을 클라이언트로 전송
+        res.setHeader('Content-Type', 'application/pdf');
+        
+        const filename = value.filename || `notion-${Date.now()}.pdf`;
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        stream.on('error', (err) => {
+            logger.error(`Stream error during PDF transfer: ${err.message}`);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'PDF 전송 중 오류 발생' });
+            }
+        });
+
+        stream.pipe(res);
+
+        logger.info(`PDF rendered successfully: ${filename}`);
+
+    } catch (err) {
+        logger.error(`Failed to render HTML to PDF: ${err.message}`, { stack: err.stack });
+        if (!res.headersSent) {
+            res.status(500).json({ error: `PDF 렌더링 실패: ${err.message}` });
+        }
+    }
 });
 
 module.exports = router;

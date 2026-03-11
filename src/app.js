@@ -24,9 +24,28 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '../public'), {
+    setHeaders: (res, filePath, stat) => {
+        // WOFF2 폰트 파일의 올바른 Content-Type 설정
+        if (filePath.endsWith('.woff2')) {
+            res.set('Content-Type', 'application/font-woff2');
+            res.set('Cache-Control', 'public, max-age=31536000, immutable');
+            res.set('Access-Control-Allow-Origin', '*');
+        }
+    }
+}));
 
 console.log(path.join(__dirname, '../public'));
+
+// WOFF2 폰트 파일의 Content-Type 설정
+app.use('/katex/fonts', express.static(path.join(__dirname, '../public/katex/fonts'), {
+    setHeaders: (res, path, stat) => {
+        if (path.endsWith('.woff2')) {
+            res.set('Content-Type', 'application/font-woff2');
+            res.set('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+    }
+}));
 
 
 app.use('/downloads', express.static(path.join(__dirname, '../public/downloads'), {
