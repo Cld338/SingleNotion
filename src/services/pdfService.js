@@ -919,7 +919,7 @@ class PdfService {
             
             await page.setViewport({ width: finalWidth + 1000, height: finalHeight });
             
-            await new Promise(resolve => setTimeout(resolve, 20000));
+            await new Promise(resolve => setTimeout(resolve, 3000));
 
             const scale = dimensions.scale;
             const pdfWidth = finalWidth * scale;

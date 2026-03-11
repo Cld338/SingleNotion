@@ -167,16 +167,10 @@ class StandardEditApp {
     renderPageBreakLines() {
         if (this.isPrinting) return;
 
-        // 기존 요소들(선, 라벨, 마커, 배경) 삭제
         document.querySelectorAll('.page-break-line, .page-number-label, .page-break-marker, .page-background').forEach(el => el.remove());
-        
         const blocks = Array.from(this.contentArea.children).filter(el => el.classList.contains('notion-selectable-block'));
         
         blocks.forEach(block => {
-            // [추가] 분할 관련 시각적 클래스 모두 초기화
-            block.classList.remove('selected-break', 'block-has-break', 'user-page-break', 'auto-page-break');
-            block.style.outline = ''; // 호버 외곽선 초기화
-
             if (block.dataset.pushedMargin) {
                 block.style.marginTop = block.dataset.originalMargin || '';
                 delete block.dataset.pushedMargin;
@@ -343,16 +337,11 @@ class StandardEditApp {
     updatePageBreakPreview() {
         if (!this.contentArea || this.isPrinting) return;
 
-        // 1. 블록 배치 및 클래스 초기화 (위에서 수정한 renderPageBreakLines 호출)
+        // 1. 블록들의 물리적 배치를 먼저 업데이트 (마진 변경 적용)
         this.renderPageBreakLines();
 
-        // 2. 기존 마커 요소 제거
+        // 2. 업데이트된 위치에 마커 다시 그리기
         document.querySelectorAll('.page-break-marker').forEach(marker => marker.remove());
-
-        // [추가] 단일 페이지(SINGLE) 포맷일 경우 마커를 새로 그리지 않고 종료
-        if (this.format === 'SINGLE') {
-            return;
-        }
 
         const blocks = this.contentArea.children;
         this.selectedBreaks.forEach(breakIndex => {
@@ -400,7 +389,6 @@ class StandardEditApp {
             block.dataset.blockIndex = index;
 
             block.addEventListener('mouseenter', () => {
-                if (this.format === 'SINGLE') return;
                 const info = Utils.getBlockPageInfo(block, this.pageHeightPx);
                 if (info.spansMultiplePages) {
                     block.style.outline = '2px solid #fbbf24';
@@ -415,8 +403,6 @@ class StandardEditApp {
             });
 
             block.addEventListener('click', (e) => {
-                if (this.format === 'SINGLE') return;
-                
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -568,48 +554,52 @@ class StandardEditApp {
             this.generateBtn.disabled = true;
             this.loadingOverlay.style.display = 'flex';
             
-            // 로딩 텍스트 요소 찾기
-            const statusText = this.loadingOverlay.querySelector('.loading-text') || this.loadingOverlay.querySelector('p');
+            const statusText = document.querySelector('.loading-overlay .loading-text');
 
+            // 포맷이 'SINGLE'인 경우 서버 사이드 렌더링(edit 페이지 방식) 사용
             if (this.format === 'SINGLE') {
-                // [단일 페이지] 서버 사이드 렌더링 (edit 페이지 방식)
-                if (statusText) statusText.innerText = "PDF 생성 준비 중...";
+                if (statusText) statusText.innerText = "서버에서 PDF를 생성 중입니다...";
                 
                 const margins = this.getMargins();
+                const options = {
+                    url: this.notionUrl,
+                    includeTitle: document.getElementById('chk-title').checked,
+                    includeBanner: document.getElementById('chk-banner').checked,
+                    includeTags: document.getElementById('chk-tags').checked,
+                    marginTop: margins.top,
+                    marginBottom: margins.bottom,
+                    marginLeft: margins.left,
+                    marginRight: margins.right,
+                    pageWidth: parseInt(document.getElementById('pageWidth').value) || 1080,
+                    mode: 'full' // 서버의 pdfService.generatePdf 로직 사용
+                };
+
                 const response = await fetch('/convert-url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: this.notionUrl,
-                        includeTitle: document.getElementById('chk-title').checked,
-                        includeBanner: document.getElementById('chk-banner').checked,
-                        includeTags: document.getElementById('chk-tags').checked,
-                        marginTop: margins.top,
-                        marginBottom: margins.bottom,
-                        marginLeft: margins.left,
-                        marginRight: margins.right,
-                        pageWidth: parseInt(document.getElementById('pageWidth').value) || 1080,
-                        mode: 'full'
-                    })
+                    body: JSON.stringify(options)
                 });
 
                 const resData = await response.json();
                 if (!response.ok) throw new Error(resData.error || '요청 실패');
 
+                // SSE를 통해 작업 완료 대기
                 await this.trackJobStatus(resData.jobId);
                 
             } else {
-                // [표준 규격] 기존 클라이언트 사이드 인쇄 방식
+                // 표준 규격(A4 등)은 기존의 클라이언트 사이드 인쇄 방식 유지
                 if (statusText) statusText.innerText = "PDF 생성 준비 중...";
                 await this.generatePdfClient();
             }
             
-        } catch (err) {
-            console.error(err);
-            alert('PDF 생성 오류: ' + err.message);
-        } finally {
             this.loadingOverlay.style.display = 'none';
             this.generateBtn.disabled = false;
+
+        } catch (err) {
+            Logger.error('PDF 생성 오류', err);
+            alert('PDF 생성에 실패했습니다: ' + err.message);
+            this.generateBtn.disabled = false;
+            this.loadingOverlay.style.display = 'none';
         }
     }
 
@@ -960,12 +950,14 @@ class StandardEditApp {
     trackJobStatus(jobId) {
         return new Promise((resolve, reject) => {
             const eventSource = new EventSource(`/job-events/${jobId}`);
-            const statusText = this.loadingOverlay.querySelector('.loading-text') || this.loadingOverlay.querySelector('p');
+            const statusText = document.querySelector('.loading-overlay .loading-text');
 
             eventSource.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+
                 if (data.status === 'completed') {
                     eventSource.close();
+                    // 생성된 파일을 다운로드 URL로 트리거
                     const downloadUrl = `/download/${data.result.fileName}`;
                     const a = document.createElement('a');
                     a.href = downloadUrl;
@@ -973,12 +965,12 @@ class StandardEditApp {
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
-                    resolve();
+                    resolve(data.result);
                 } else if (data.status === 'failed' || data.status === 'error') {
                     eventSource.close();
                     reject(new Error(data.error || '서버 변환 실패'));
-                } else if (statusText) {
-                    statusText.innerText = `PDF 생성 중...`;
+                } else {
+                    if (statusText) statusText.innerText = `서버 작업 진행 중... (${data.status})`;
                 }
             };
 
