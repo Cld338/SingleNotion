@@ -74,27 +74,59 @@ const Utils = {
                 }
             });
 
-            // 스타일 내 background-image URL 변환
-            contentArea.querySelectorAll('[style*="background"]').forEach(el => {
+            // 스타일 내 모든 URL 속성 변환 (background-image, mask, clip-path, etc)
+            contentArea.querySelectorAll('[style]').forEach(el => {
                 const style = el.getAttribute('style');
                 if (style) {
                     let updatedStyle = style.replace(
-                        /url\(["']?(?!(?:http|data:|\/\/))([^)'"]+)["']?\)/g,
-                        (match, path) => {
+                        /url\s*\(\s*([^)]*)\s*\)/g,
+                        (match, rawPath) => {
                             try {
-                                const resolvedUrl = path.startsWith('/')
-                                    ? `${baseOrigin}${path}`
-                                    : new URL(path, baseUrl).href;
+                                // 경로에서 공백, 따옴표, 특수 문자 제거
+                                let cleanPath = rawPath
+                                    .trim()                              // 양쪽 공백 제거
+                                    .replace(/^["']+|["']+$/g, '')      // 시작/끝 따옴표 제거 (여러 개)
+                                    .replace(/&quot;/g, '')             // HTML 엔티티 따옴표 제거
+                                    .replace(/&#34;/g, '')             // 수치 HTML 엔티티 제거
+                                    .trim();                            // 다시 한번 공백 제거
+                                
+                                // 비어있거나 절대 URL인 경우
+                                if (!cleanPath) {
+                                    return match;
+                                }
+                                if (cleanPath.startsWith('http') || cleanPath.startsWith('data:') || cleanPath.startsWith('//')) {
+                                    return match;
+                                }
+                                
+                                const resolvedUrl = cleanPath.startsWith('/')
+                                    ? `${baseOrigin}${cleanPath}`
+                                    : new URL(cleanPath, baseUrl).href;
                                 fixedCount++;
                                 return `url(${resolvedUrl})`;
                             } catch (err) {
-                                Logger.warn(`Failed to fix background URL: ${path}`, err);
+                                Logger.warn(`Failed to fix URL: ${rawPath}`, err);
                                 return match;
                             }
                         }
                     );
                     el.setAttribute('style', updatedStyle);
                 }
+            });
+
+            // 1. svg 태그 내부의 image xlink:href 또는 href 처리
+            contentArea.querySelectorAll('svg image').forEach(svgImg => {
+                const href = svgImg.getAttribute('xlink:href') || svgImg.getAttribute('href');
+                if (href && !href.startsWith('http')) {
+                    const resolved = href.startsWith('/') ? `${baseOrigin}${href}` : new URL(href, baseUrl).href;
+                    svgImg.setAttribute('href', resolved);
+                    fixedCount++;
+                }
+            });
+
+            // 2. .notion-page-icon 등 SVG 직접 삽입된 경우의 스타일 처리
+            contentArea.querySelectorAll('svg').forEach(svg => {
+                // SVG 자체가 특정 경로를 참조하는 경우 처리 로직 추가 가능
+                svg.style.display = 'inline-block'; // 렌더링 누락 방지
             });
 
             Logger.log(`Relative paths fixed: ${fixedCount} items`);

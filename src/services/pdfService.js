@@ -36,18 +36,34 @@ class PdfService {
 
             // background-image URL 변환
             processedHtml = processedHtml.replace(
-                /background-image\s*:\s*url\(["']?(?!(?:http|https|data:|\/\/))([^)'"]+)["']?\)/gi,
-                (match, path) => {
+                /background-image\s*:\s*url\s*\(\s*([^)]*)\s*\)/gi,
+                (match, rawPath) => {
                     try {
-                        let resolvedUrl;
-                        if (path.startsWith('/')) {
-                            resolvedUrl = `${baseOrigin}${path}`;
-                        } else {
-                            resolvedUrl = new URL(path, baseUrl).href;
+                        // 경로에서 공백, 따옴표, 특수 문자 제거
+                        let cleanPath = rawPath
+                            .trim()
+                            .replace(/^["']+|["']+$/g, '')       // 시작/끝 따옴표 제거 (여러 개)
+                            .replace(/&quot;/g, '')              // HTML 엔티티 따옴표 제거
+                            .replace(/&#34;/g, '')              // 수치 HTML 엔티티 제거
+                            .trim();
+                        
+                        if (!cleanPath) {
+                            return match;
                         }
-                        return match.replace(path, resolvedUrl);
+                        // http, https, data, // 로 시작하지 않는 경우만 처리
+                        if (cleanPath.startsWith('http') || cleanPath.startsWith('data:') || cleanPath.startsWith('//')) {
+                            return match;
+                        }
+                        
+                        let resolvedUrl;
+                        if (cleanPath.startsWith('/')) {
+                            resolvedUrl = `${baseOrigin}${cleanPath}`;
+                        } else {
+                            resolvedUrl = new URL(cleanPath, baseUrl).href;
+                        }
+                        return `background-image: url(${resolvedUrl})`;
                     } catch (err) {
-                        logger.warn(`Failed to convert background URL: ${path}`);
+                        logger.warn(`Failed to convert background URL: ${rawPath}`);
                         return match;
                     }
                 }
@@ -58,18 +74,34 @@ class PdfService {
                 /style=["']([^"']*)["']/gi,
                 (match, styleContent) => {
                     let updatedStyle = styleContent.replace(
-                        /url\(["']?(?!(?:http|https|data:|\/\/))([^)'"]+)["']?\)/g,
-                        (urlMatch, path) => {
+                        /url\s*\(\s*([^)]*)\s*\)/g,
+                        (urlMatch, rawPath) => {
                             try {
+                                // 경로에서 공백, 따옴표, 특수 문자 제거
+                                let cleanPath = rawPath
+                                    .trim()
+                                    .replace(/^["']+|["']+$/g, '')       // 시작/끝 따옴표 제거 (여러 개)
+                                    .replace(/&quot;/g, '')              // HTML 엔티티 따옴표 제거
+                                    .replace(/&#34;/g, '')              // 수치 HTML 엔티티 제거
+                                    .trim();
+                                
+                                if (!cleanPath) {
+                                    return urlMatch;
+                                }
+                                // http, https, data, // 로 시작하지 않는 경우만 처리
+                                if (cleanPath.startsWith('http') || cleanPath.startsWith('data:') || cleanPath.startsWith('//')) {
+                                    return urlMatch;
+                                }
+                                
                                 let resolvedUrl;
-                                if (path.startsWith('/')) {
-                                    resolvedUrl = `${baseOrigin}${path}`;
+                                if (cleanPath.startsWith('/')) {
+                                    resolvedUrl = `${baseOrigin}${cleanPath}`;
                                 } else {
-                                    resolvedUrl = new URL(path, baseUrl).href;
+                                    resolvedUrl = new URL(cleanPath, baseUrl).href;
                                 }
                                 return `url(${resolvedUrl})`;
                             } catch (err) {
-                                logger.warn(`Failed to convert style URL: ${path}`);
+                                logger.warn(`Failed to convert style URL: ${rawPath}`);
                                 return urlMatch;
                             }
                         }
