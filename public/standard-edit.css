@@ -65,7 +65,7 @@ body {
     overflow: hidden;
 }
 
-.editor-header {
+.navbar {
     height: 60px;
     background: white;
     display: flex;

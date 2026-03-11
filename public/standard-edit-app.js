@@ -343,6 +343,11 @@ class StandardEditApp {
         // 2. 업데이트된 위치에 마커 다시 그리기
         document.querySelectorAll('.page-break-marker').forEach(marker => marker.remove());
 
+        // [추가] 단일 페이지(SINGLE) 포맷일 경우 마커를 새로 그리지 않고 종료
+        if (this.format === 'SINGLE') {
+            return;
+        }
+
         const blocks = this.contentArea.children;
         this.selectedBreaks.forEach(breakIndex => {
             if (breakIndex < blocks.length - 1) {
@@ -388,21 +393,23 @@ class StandardEditApp {
             block.classList.add('notion-selectable-block');
             block.dataset.blockIndex = index;
 
-            block.addEventListener('mouseenter', () => {
-                const info = Utils.getBlockPageInfo(block, this.pageHeightPx);
-                if (info.spansMultiplePages) {
-                    block.style.outline = '2px solid #fbbf24';
-                    block.title = `페이지 ${info.startPage + 1}~${info.endPage + 1}에 걸쳐 있음`;
-                } else {
-                    block.title = `페이지 ${info.startPage + 1}`;
-                }
-            });
+            // block.addEventListener('mouseenter', () => {
+            //     if (this.format === 'SINGLE') return;
+            //     const info = Utils.getBlockPageInfo(block, this.pageHeightPx);
+            //     if (info.spansMultiplePages) {
+            //         block.style.outline = '2px solid #fbbf24';
+            //         block.title = `페이지 ${info.startPage + 1}~${info.endPage + 1}에 걸쳐 있음`;
+            //     } else {
+            //         block.title = `페이지 ${info.startPage + 1}`;
+            //     }
+            // });
 
             block.addEventListener('mouseleave', () => {
                 block.style.outline = '';
             });
 
             block.addEventListener('click', (e) => {
+                if (this.format === 'SINGLE') return;
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -663,7 +670,7 @@ class StandardEditApp {
             // 인쇄 엔진(Print)이 인식할 수 있도록 기존 박스 스타일 복구
             element.style.background = 'white';
             element.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.1)';
-            element.style.paddingBottom = '50px';
+            element.style.paddingBottom = '0px';
 
             this.isPrinting = true; // 추가: 리사이즈 이벤트 차단 락(Lock) 설정
 
@@ -827,7 +834,7 @@ class StandardEditApp {
                         print-color-adjust: exact !important;
                     }
                     /* 1. 사이드바, 헤더 및 마커/라벨 등 인쇄에 불필요한 UI 요소 완벽 숨김 */
-                    .editor-header, .sidebar, .loading-overlay,
+                    .navbar, .sidebar, .loading-overlay,
                     .page-break-marker, .page-break-line, .page-number-label {
                         display: none !important;
                     }
@@ -891,10 +898,10 @@ class StandardEditApp {
                         page-break-before: always !important;
                         break-before: page !important;
                     }
-
-                    #content-area > div.notion-selectable-block.selected-break.block-has-break > div::after {
+                    #content-area > div.notion-selectable.notion-table_of_contents-block.notion-selectable-block.selected-break.block-has-break > div::after {
                         display: none !important;
                     }
+
                 }
             `;
 
@@ -921,6 +928,9 @@ class StandardEditApp {
             // 7. 인쇄 후 원래 UI 상태로 복구
             this.isPrinting = false;
             this.generateBtn.disabled = false;
+
+            element.style.background = 'none';
+            element.style.boxShadow = 'none';
             
             // 클래스 제거 시 auto-page-break도 함께 제거
             Array.from(element.children).forEach(block => {
