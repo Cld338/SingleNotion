@@ -6,12 +6,16 @@ const Utils = {
 /**
      * 용지 규격에 따른 페이지 높이 계산
      */
+    /**
+     * 용지 규격에 따른 페이지 높이 계산
+     */
     getPageHeight(format) {
         const formats = {
+            'SINGLE': 999999, // 단일 페이지는 높이 무제한 처리
             'A4': 1123,     // 297mm
             'A3': 1587,     // 420mm
-            'ISO_B5': 945,  // 250mm (국제 표준)
-            'B5_JIS': 971,  // 257mm (한국/일본 표준)
+            'ISO_B5': 945,  // 250mm
+            'B5_JIS': 971,  // 257mm
             'Letter': 1056  // 11in
         };
         return formats[format] || 1123;
@@ -22,11 +26,12 @@ const Utils = {
      */
     getPageWidth(format) {
         const formats = {
-            'A4': 794,      // 210mm
-            'A3': 1123,     // 297mm
-            'ISO_B5': 665,  // 176mm (국제 표준)
-            'B5_JIS': 688,  // 182mm (한국/일본 표준)
-            'Letter': 816   // 8.5in
+            'SINGLE': parseInt(document.getElementById('pageWidth')?.value) || 1080,
+            'A4': 794,      
+            'A3': 1123,     
+            'ISO_B5': 665,  
+            'B5_JIS': 688,  
+            'Letter': 816   
         };
         return formats[format] || 794;
     },
@@ -262,9 +267,12 @@ const Utils = {
     /**
      * 블록 리스트를 HTML 문자열로 변환
      */
+    /**
+     * 블록 리스트를 HTML 문자열로 변환
+     */
     createBreaksListHTML(selectedBreaks, contentArea) {
         if (selectedBreaks.size === 0) {
-            return '<p style="font-size: 14px; color: #94a3b8;">설정된 분할 지점이 없습니다.</p>';
+            return '<p style="font-size: 13px; font-weight: 600; color: var(--text-muted); background: #f8fafc; padding: 16px; border-radius: 12px; text-align: center; border: 1px dashed #cbd5e1;">설정된 분할 지점이 없습니다.</p>';
         }
 
         const blocks = contentArea.children;
@@ -273,10 +281,11 @@ const Utils = {
             .sort((a, b) => a - b)
             .map(bIdx => {
                 const block = blocks[bIdx];
-                const blockText = block.textContent.substring(0, 30).trim() || `블록 #${parseInt(bIdx) + 1}`;
-                return `<li style="margin-bottom: 0.8rem; padding: 0.75rem; background: #f8fafc; border-radius: 8px; border-left: 3px solid #6366f1;">
-                    <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">블록 #${parseInt(bIdx) + 1} 뒤에서 분할</div>
-                    <div style="font-size: 12px; color: #94a3b8; margin-top: 4px; word-break: break-word;">"${blockText}..."</div>
+                // 텍스트가 없는 블록(이미지 등)일 경우를 위한 기본값 설정
+                const blockText = block.textContent.substring(0, 40).trim() || `[미디어/빈 블록]`;
+                
+                return `<li class="break-nav-item" data-block-index="${bIdx}" style="margin-bottom: 0.8rem; padding: 0.8rem; background: #f8fafc; border-radius: 8px; border-left: 3px solid #6366f1; cursor: pointer; transition: all 0.2s;" onmouseenter="this.style.background='#e0e7ff'" onmouseleave="this.style.background='#f8fafc'" title="클릭하여 분할 지점으로 이동">
+                    <div style="font-size: 13px; font-weight: 500; color: var(--text-main); word-break: break-word; line-height: 1.4;">"${blockText}..."</div>
                 </li>`;
             })
             .join('');

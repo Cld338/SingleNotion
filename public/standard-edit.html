@@ -10,24 +10,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
-    <header class="editor-header">
-        <div class="logo">
-            <i class="fa-solid fa-file-pdf" style="color: #6366f1;"></i>
-            <strong style="margin-left: 8px;">Standard Editor</strong>
+    <nav class="navbar" style="position: relative; z-index: 100; border-bottom: 1px solid rgba(226, 232, 240, 0.8);">
+        <div class="nav-container" style="max-width: 100%; padding: 0 2rem;">
+            <a href="/" class="logo">
+                <i class="fa-solid fa-file-pdf"></i> Single Notion
+            </a>
         </div>
-        <div class="actions" style="display: flex; gap: 10px; align-items: center;">
-            <select id="format-select" class="badge" style="cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; padding: 4px 12px; border-radius: 999px; font-weight: 600; color: #475569; font-size: 13px; outline: none;">
-                <option value="A4">A4</option>
-                <option value="A3">A3</option>
-                <option value="ISO_B5">ISO B5</option>
-                <option value="B5_JIS">B5 (JIS)</option>
-                <option value="Letter">Letter</option>
-            </select>
-            <button id="generate-btn" class="submit-btn" style="padding: 8px 16px; font-size: 14px;">
-                PDF 생성하기
-            </button>
-        </div>
-    </header>
+    </nav>
 
     <div class="main-container">
         <div id="notion-viewer">
@@ -39,34 +28,87 @@
             </div>
         </div>
 
-        <aside class="sidebar">
-            <h3 style="margin-bottom: 10px;">여백 설정 <span style="font-size: 0.8rem; font-weight: 400; color: #94a3b8;">(px)</span></h3>
-                <div class="margin-control-container">
+        <aside class="sidebar" style="width: 340px; padding: 0; border-left: 1px solid #e2e8f0; background: white; display: flex; flex-direction: column; height: 100%; overflow: hidden; flex-shrink: 0;">
+            
+            <div class="sidebar-scroll-area" style="flex: 1; overflow-y: auto; overflow-x: hidden; padding: 2rem 1.5rem 1rem 1.5rem;">
+                
+                <h3 style="margin-bottom: 12px; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">출력 포맷</h3>
+                <select id="format-select" style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 2px solid #e2e8f0; background-color: #f8fafc; font-size: 0.95rem; font-weight: 600; color: var(--text-main); outline: none; cursor: pointer; transition: all 0.2s; margin-bottom: 30px;">
+                    <option value="SINGLE">단일 페이지</option>
+                    <option value="A4">A4 (210 x 297mm)</option>
+                    <option value="A3">A3 (297 x 420mm)</option>
+                    <option value="ISO_B5">ISO B5 (176 x 250mm)</option>
+                    <option value="B5_JIS">B5 JIS (182 x 257mm)</option>
+                    <option value="Letter">Letter (8.5 x 11in)</option>
+                </select>
+
+                <h3 style="margin-bottom: 16px; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">여백 설정 <span style="font-size: 0.8rem; font-weight: 400; color: var(--text-muted);">(px)</span></h3>
+                <div class="margin-control-container" style="width: 100%; background: #f8fafc; padding: 20px 15px; border-radius: 16px; border: 1px solid #e2e8f0; display: grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: auto auto auto; gap: 10px; align-items: center; justify-items: center; margin-bottom: 30px;">
                     <div class="margin-input-wrapper wrapper-top">
-                        <label>Top</label>
-                        <input type="number" id="marginTop" value="50" min="0">
+                        <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Top</label>
+                        <input type="number" id="marginTop" value="50" min="0" style="width: 55px; height: 32px; border: 2px solid #e2e8f0; border-radius: 8px; text-align: center; font-weight: 600; outline: none; transition: 0.2s;">
                     </div>
                     <div class="margin-input-wrapper wrapper-left">
-                        <label>Left</label>
-                        <input type="number" id="marginLeft" value="50" min="0">
+                        <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Left</label>
+                        <input type="number" id="marginLeft" value="50" min="0" style="width: 55px; height: 32px; border: 2px solid #e2e8f0; border-radius: 8px; text-align: center; font-weight: 600; outline: none; transition: 0.2s;">
                     </div>
-                    <div class="page-mockup"></div>
+                    <div class="page-mockup" style="width: 44px; height: 62px; background: white; border: 2px solid #cbd5e1; border-radius: 6px; position: relative; box-shadow: var(--shadow-sm);"></div>
                     <div class="margin-input-wrapper wrapper-right">
-                        <label>Right</label>
-                        <input type="number" id="marginRight" value="50" min="0">
+                        <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Right</label>
+                        <input type="number" id="marginRight" value="50" min="0" style="width: 55px; height: 32px; border: 2px solid #e2e8f0; border-radius: 8px; text-align: center; font-weight: 600; outline: none; transition: 0.2s;">
                     </div>
                     <div class="margin-input-wrapper wrapper-bottom">
-                        <label>Bottom</label>
-                        <input type="number" id="marginBottom" value="50" min="0">
+                        <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Bottom</label>
+                        <input type="number" id="marginBottom" value="50" min="0" style="width: 55px; height: 32px; border: 2px solid #e2e8f0; border-radius: 8px; text-align: center; font-weight: 600; outline: none; transition: 0.2s;">
                     </div>
                 </div>
-            <h3>페이지 설정</h3>
-            <p class="text-muted" style="font-size: 13px; margin-bottom: 1rem;">
-                문서의 블록을 클릭하여 페이지가 나뉠 지점을 선택하세요. 선택된 블록 <b>이후</b>부터 새로운 페이지가 시작됩니다.
-            </p>
-            <div id="break-list">
-                <p style="font-size: 14px; color: #94a3b8;">설정된 분할 지점이 없습니다.</p>
+
+                <div id="single-page-options" style="display: none; margin-bottom: 30px;">
+                    <h3 style="margin-bottom: 12px; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">페이지 너비 <span style="font-size: 0.8rem; font-weight: 400; color: var(--text-muted);">(px)</span></h3>
+                    <input type="number" id="pageWidth" value="1080" min="500" style="width: 100%; padding: 12px 16px; border-radius: 12px; border: 2px solid #e2e8f0; background-color: #f8fafc; font-size: 0.95rem; font-weight: 600; outline: none; transition: 0.2s;">
+                </div>
+
+                <h3 style="margin-bottom: 12px; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">표시 옵션</h3>
+                <div class="options-group" style="flex-direction: column; gap: 8px; margin-bottom: 30px; width: 100%;">
+                    <label class="option-chip" style="width: 100%; margin: 0;">
+                        <input type="checkbox" id="chk-title" checked>
+                        <span class="chip-content" style="justify-content: flex-start; padding: 10px 14px; font-size: 0.85rem;">
+                            <i class="fa-solid fa-heading" style="width: 18px; text-align: center;"></i> 제목 포함
+                        </span>
+                    </label>
+                    <label class="option-chip" style="width: 100%; margin: 0;">
+                        <input type="checkbox" id="chk-banner" checked>
+                        <span class="chip-content" style="justify-content: flex-start; padding: 10px 14px; font-size: 0.85rem;">
+                            <i class="fa-solid fa-image" style="width: 18px; text-align: center;"></i> 커버 및 아이콘 포함
+                        </span>
+                    </label>
+                    <label class="option-chip" style="width: 100%; margin: 0;">
+                        <input type="checkbox" id="chk-tags" checked>
+                        <span class="chip-content" style="justify-content: flex-start; padding: 10px 14px; font-size: 0.85rem;">
+                            <i class="fa-solid fa-tags" style="width: 18px; text-align: center;"></i> 속성 포함
+                        </span>
+                    </label>
+                </div>
+
+                <div id="page-break-section">
+                    <h3 style="margin-bottom: 8px; font-size: 1.1rem; font-weight: 700; color: var(--text-main);">페이지 분할</h3>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6;">
+                        문서의 블록을 클릭하여 페이지가 나뉠 지점을 선택하세요. 선택된 블록 <b style="color: var(--primary-color);">이후</b>부터 새로운 페이지가 시작됩니다.
+                    </p>
+                    <div id="break-list" style="margin-bottom: 20px;">
+                        <p style="font-size: 13px; font-weight: 600; color: var(--text-muted); background: #f8fafc; padding: 16px; border-radius: 12px; text-align: center; border: 1px dashed #cbd5e1;">설정된 분할 지점이 없습니다.</p>
+                    </div>
+                </div>
+
             </div>
+
+            <div class="sidebar-footer" style="padding: 1.2rem 1.5rem 1.5rem 1.5rem; background: white; border-top: 1px solid #f1f5f9; box-shadow: 0 -4px 10px rgba(0,0,0,0.02); z-index: 10;">
+                <button id="generate-btn" class="main-btn" style="width: 100%; padding: 16px; font-size: 1.05rem; border-radius: 12px;">
+                    <span>PDF 생성하기</span>
+                    <i class="fa-solid fa-file-pdf"></i>
+                </button>
+            </div>
+
         </aside>
     </div>
 

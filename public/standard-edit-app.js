@@ -40,8 +40,13 @@ class StandardEditApp {
                 this.formatSelect.value = this.format;
             }
 
-            // 수정: API 요청 URL에 파라미터 추가
-            const requestUrl = `/preview-html?url=${encodeURIComponent(this.notionUrl)}&includeTitle=${this.includeTitle}&includeBanner=${this.includeBanner}&includeTags=${this.includeTags}`;
+            const params = new URLSearchParams(window.location.search);
+            document.getElementById('chk-title').checked = params.get('includeTitle') !== 'false'; 
+            document.getElementById('chk-banner').checked = params.get('includeBanner') !== 'false';
+            document.getElementById('chk-tags').checked = params.get('includeTags') !== 'false';
+
+            // 서버에는 항상 모든 요소를 포함해서 렌더링하도록 요청
+            const requestUrl = `/preview-html?url=${encodeURIComponent(this.notionUrl)}&includeTitle=true&includeBanner=true&includeTags=true`;
             const response = await fetch(requestUrl);
 
             if (!response.ok) {
@@ -186,6 +191,35 @@ class StandardEditApp {
         this.contentArea.style.paddingTop = `${Math.max(0.1, pagePaddingTop)}px`;
         // [추가] 첫 번째 페이지의 Top Margin을 위해 contentArea에 패딩 탑 적용
         this.contentArea.style.paddingTop = `${pagePaddingTop}px`;
+
+       if (this.format === 'SINGLE') {
+            const paperWidthScaled = Utils.getPageWidth('SINGLE') / this.viewerScale;
+            const marginLeftScaled = margins.left / this.viewerScale;
+            
+            // 화면 상에서 여백이 스케일의 영향을 받지 않도록 스케일만큼 역산하여 패딩 부여
+            const pt = margins.top / this.viewerScale;
+            const pb = margins.bottom / this.viewerScale;
+            
+            this.contentArea.style.paddingTop = `${Math.max(0.1, pt)}px`;
+            this.contentArea.style.paddingBottom = `${pb}px`;
+            
+            // 실제 콘텐츠 전체 높이 (위에서 부여한 상하 패딩이 포함된 높이)
+            const contentRealHeight = this.contentArea.scrollHeight;
+            
+            const pageBg = document.createElement('div');
+            pageBg.className = 'page-background';
+            pageBg.style.position = 'absolute';
+            pageBg.style.top = `0px`;
+            pageBg.style.left = `-${marginLeftScaled}px`;
+            pageBg.style.width = `${paperWidthScaled}px`;
+            pageBg.style.height = `${contentRealHeight}px`;
+            pageBg.style.background = 'white';
+            pageBg.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.15)';
+            pageBg.style.zIndex = '-1';
+            
+            this.contentArea.appendChild(pageBg);
+            return; // 이후의 다중 페이지 계산 로직 스킵
+        }
         
         let currentPage = 0;
 
@@ -392,6 +426,31 @@ class StandardEditApp {
         const list = document.getElementById('break-list');
         const html = Utils.createBreaksListHTML(this.selectedBreaks, this.contentArea);
         list.innerHTML = html;
+
+        // [추가] 리스트 아이템 클릭 시 해당 블록으로 스크롤 이동
+        list.querySelectorAll('.break-nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const idx = item.dataset.blockIndex;
+                const block = this.contentArea.children[idx];
+                
+                if (block) {
+                    // 화면 중앙으로 부드럽게 스크롤
+                    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // 시각적 피드백 (블록 배경색을 잠시 보라색으로 강조)
+                    const originalBg = block.style.backgroundColor;
+                    const originalTransition = block.style.transition;
+                    
+                    block.style.transition = 'background-color 0.3s ease';
+                    block.style.backgroundColor = 'rgba(99, 102, 241, 0.15)';
+                    
+                    setTimeout(() => {
+                        block.style.backgroundColor = originalBg;
+                        setTimeout(() => { block.style.transition = originalTransition; }, 300);
+                    }, 800);
+                }
+            });
+        });
     }
 
     setupEventListeners() {
@@ -400,6 +459,14 @@ class StandardEditApp {
 
         if (this.formatSelect) {
             this.formatSelect.addEventListener('change', (e) => this.onFormatChange(e.target.value));
+        }
+
+        const pw = document.getElementById('pageWidth');
+        if (pw) {
+            pw.addEventListener('input', () => {
+                if (this.isPrinting) return;
+                this.updateScaleAndLayout();
+            });
         }
 
 
@@ -414,6 +481,14 @@ class StandardEditApp {
                     if (this.isPrinting) return;
                     this.updateScaleAndLayout();
                 });
+            }
+        });
+
+        // [추가] 표시 옵션 체크박스 이벤트 리스너
+        ['chk-title', 'chk-banner', 'chk-tags'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', () => this.updateVisibility());
             }
         });
     }
@@ -442,9 +517,22 @@ class StandardEditApp {
 
     onFormatChange(newFormat) {
         if (this.isPrinting) return;
-        
         Logger.log(`포맷 변경: ${this.format} -> ${newFormat}`, 'info');
         this.format = newFormat;
+        
+        // --- [추가] 단일 페이지 UI 토글 로직 ---
+        const breakSection = document.getElementById('page-break-section');
+        const singleOptions = document.getElementById('single-page-options');
+        
+        if (this.format === 'SINGLE') {
+            if (breakSection) breakSection.style.display = 'none';
+            if (singleOptions) singleOptions.style.display = 'block';
+            this.selectedBreaks.clear(); // 분할 지점 초기화
+            this.updateSidebar();
+        } else {
+            if (breakSection) breakSection.style.display = 'block';
+            if (singleOptions) singleOptions.style.display = 'none';
+        }
         
         // 1. 새로운 규격에 맞춰 높이와 스케일 재계산
         this.pageHeightPx = Utils.getPageHeight(this.format);
@@ -465,51 +553,52 @@ class StandardEditApp {
         try {
             this.generateBtn.disabled = true;
             this.loadingOverlay.style.display = 'flex';
-            const statusText = document.querySelector('.loading-overlay p');
-            statusText.innerText = "PDF 생성 중...";
+            
+            const statusText = document.querySelector('.loading-overlay .loading-text');
+            if (statusText) statusText.innerText = "PDF 생성 중...";
 
-            // 분할 정보 로깅
-            Logger.log(`PDF 생성 시작 - 선택된 분할: ${this.selectedBreaks.size}개`, 'title');
-            const contentHeight = this.contentArea.scrollHeight;
-            const scaledPageHeight = this.pageHeightPx * this.viewerScale;
-            const totalPages = Math.ceil(contentHeight / scaledPageHeight);
-            this.logPageBreakInfo(totalPages, scaledPageHeight);
-
-            if (this.mode === 'standard') {
-                await this.generatePdfClient();
-                this.loadingOverlay.style.display = 'none';
-            } else {
-                const params = new URLSearchParams(window.location.search);
-                const margins = this.getMargins(); // 여백 값 가져오기
-                const payload = {
-                    url: this.notionUrl,
-                    mode: 'full',
-                    format: this.format,
-                    pageBreaks: Array.from(this.selectedBreaks).map(Number),
-                    includeTitle: params.get('includeTitle') === 'true',
-                    includeBanner: params.get('includeBanner') === 'true',
-                    includeTags: params.get('includeTags') === 'true',
-                    marginTop: margins.top,          // 추가
-                    marginBottom: margins.bottom,    // 추가
-                    marginLeft: margins.left,        // 추가
-                    marginRight: margins.right       // 추가
-                };
-
-                const response = await fetch('/convert-url', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                const { jobId } = await response.json();
-                this.trackJobStatus(jobId);
-            }
+            // 단일 페이지, 표준 규격 모두 브라우저 인쇄 엔진으로 처리
+            await this.generatePdfClient();
+            
+            this.loadingOverlay.style.display = 'none';
+            this.generateBtn.disabled = false;
 
         } catch (err) {
             Logger.error('PDF 생성 오류', err);
             alert('PDF 생성에 실패했습니다: ' + err.message);
             this.generateBtn.disabled = false;
             this.loadingOverlay.style.display = 'none';
+        }
+    }
+
+    // [추가] 체크박스 상태에 따라 CSS를 주입하여 요소를 숨기고 페이지 분할 재계산
+    updateVisibility() {
+        let styles = '';
+        
+        // pdfService.js의 CSS 셀렉터를 참고하여 숨김 처리
+        if (!document.getElementById('chk-title').checked) {
+            styles += `#content-area h1, #content-area .notion-page-block:has(h1) { display: none !important; }\n`;
+        }
+        if (!document.getElementById('chk-banner').checked) {
+            styles += `#content-area .notion-page-cover-wrapper, #content-area .notion-record-icon, #content-area .notion-page-controls { display: none !important; }\n`;
+        }
+        if (!document.getElementById('chk-tags').checked) {
+            styles += `#content-area [aria-label="페이지 속성"], #content-area [aria-label="Page properties"], #content-area div[role="table"][aria-label="Page properties"] + div, #content-area div[role="table"][aria-label="페이지 속성"] + div { display: none !important; }\n`;
+        }
+
+        let styleEl = document.getElementById('sn-display-options-style');
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = 'sn-display-options-style';
+            document.head.appendChild(styleEl);
+        }
+        styleEl.innerHTML = styles;
+
+        // 요소가 사라지거나 나타나면 콘텐츠 전체 높이가 변하므로 약간의 지연 후 페이지 분할 재계산
+        if (!this.isPrinting) {
+            setTimeout(() => {
+                this.updateScaleAndLayout();
+            }, 50);
         }
     }
 
@@ -643,6 +732,39 @@ class StandardEditApp {
             }
 
             const margins = this.getMargins();
+
+            // [수정] 단일 페이지 여부에 따른 페이지 크기 및 여백 계산
+            let pageSizeStr = '';
+            let pageMarginCSS = '';
+            let contentPaddingCSS = '0.1px 0 0 0';
+
+            if (this.format === 'SINGLE') {
+                const targetWidth = Utils.getPageWidth('SINGLE');
+                
+                // 인쇄 시 순수 콘텐츠 높이를 정확히 측정하기 위해 미리보기용 패딩 임시 제거
+                const tempPt = this.contentArea.style.paddingTop;
+                const tempPb = this.contentArea.style.paddingBottom;
+                this.contentArea.style.paddingTop = '0.1px';
+                this.contentArea.style.paddingBottom = '0px';
+                
+                const pureHeight = this.contentArea.scrollHeight;
+                
+                // 측정 후 화면 복구
+                this.contentArea.style.paddingTop = tempPt;
+                this.contentArea.style.paddingBottom = tempPb;
+                
+                // 전체 PDF 높이 = (순수 콘텐츠 높이 * 스케일) + 상단 여백 + 하단 여백 + 여유 버퍼(2px)
+                const targetHeight = Math.ceil(pureHeight * this.viewerScale) + margins.top + margins.bottom + 2;
+                
+                pageSizeStr = `${targetWidth}px ${targetHeight}px`;
+                
+                // 단일 페이지도 @page margin을 사용하여 절대적인 픽셀 여백 확보
+                pageMarginCSS = `margin: ${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px !important;`;
+                contentPaddingCSS = `0.1px 0 0 0`; // PDF 내부 패딩 초기화
+            } else {
+                pageSizeStr = getPrintPageSize(this.format);
+                pageMarginCSS = `margin: ${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px !important;`;
+            }
 
             // popup.js의 스타일과 브라우저 인쇄 제어 스타일 병합
             printStyle.innerHTML = `

@@ -58,58 +58,6 @@
                             <i class="fa-solid fa-link"></i>
                             <input type="text" id="url" name="url" placeholder="https://www.notion.so/..." required>
                         </div>
-                        <div class="form-group">
-                        <label>출력 모드 선택</label>
-                        <div class="mode-selection">
-                            <label class="mode-option">
-                                <input type="radio" name="mode" value="single" checked>
-                                <div class="mode-label">
-                                    <i class="fa-solid fa-scroll"></i>
-                                    <span>단일 페이지</span>
-                                </div>
-                            </label>
-                            <label class="mode-option">
-                                <input type="radio" name="mode" value="standard">
-                                <div class="mode-label">
-                                    <i class="fa-solid fa-file-lines"></i>
-                                    <span>표준 규격</span>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div id="standardOptions" style="display: none;">
-                        <label for="format">용지 규격</label>
-                        <select id="format" name="format" class="select-styled">
-                            <option value="A4">A4 (210 x 297mm)</option>
-                            <option value="A3">A3 (297 x 420mm)</option>
-                            <option value="B5">B5 (182 x 257mm)</option>
-                            <option value="Letter">Letter (8.5 x 11in)</option>
-                        </select>
-                    </div>
-                        
-                        <div class="input-label">PDF 설정</div>
-                        <div class="options-group">
-                            <label class="option-chip">
-                                <input type="checkbox" name="includeTitle" value="true" checked>
-                                <span class="chip-content">
-                                    <i class="fa-solid fa-heading"></i> 제목
-                                </span>
-                            </label>
-                            <label class="option-chip">
-                                <input type="checkbox" name="includeBanner" value="true" checked>
-                                <span class="chip-content">
-                                    <i class="fa-solid fa-image"></i> 배너
-                                </span>
-                            </label>
-                            <label class="option-chip">
-                                <input type="checkbox" name="includeTags" value="true" checked>
-                                <span class="chip-content">
-                                    <i class="fa-solid fa-tags"></i> 속성
-                                </span>
-                            </label>
-                        </div>
-                        
                         <button type="submit" id="submitBtn" class="main-btn">
                             <span>PDF 변환하기</span>
                             <i class="fa-solid fa-arrow-right"></i>
@@ -121,7 +69,7 @@
 
         <section id="how-it-works" class="features">
             <div class="container">
-                <h2 class="section-title">3초 만에 끝내는 방법</h2>
+                <h2 class="section-title">3초 만에 시작하기</h2>
                 <div class="feature-grid">
                     <div class="feature-item fade-in-up">
                         <div class="icon-box"><i class="fa-solid fa-share-nodes"></i></div>
@@ -135,8 +83,8 @@
                     </div>
                     <div class="feature-item fade-in-up" style="animation-delay: 0.2s;">
                         <div class="icon-box"><i class="fa-solid fa-file-arrow-down"></i></div>
-                        <h3>3. PDF 다운로드</h3>
-                        <p>변환 버튼을 누르면<br>즉시 다운로드가 시작됩니다.</p>
+                        <h3>3. PDF 편집</h3>
+                        <p>변환 버튼을 누르면<br>편집 페이지로 이동합니다.</p>
                     </div>
                 </div>
             </div>
@@ -161,26 +109,11 @@
     </div>
 
     <script>
-        // 모드 선택에 따른 옵션 창 노출 제어
-        const modeRadios = document.querySelectorAll('input[name="mode"]');
-        const standardOptions = document.getElementById('standardOptions');
-
-        modeRadios.forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                if (e.target.value === 'standard') {
-                    standardOptions.style.display = 'block';
-                } else {
-                    standardOptions.style.display = 'none';
-                }
-            });
-        });
-
         document.getElementById('convertForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
             const formData = new FormData(this);
             let rawUrl = formData.get('url').trim();
-            const mode = formData.get('mode');
 
             try {
                 const urlObj = new URL(rawUrl);
@@ -190,19 +123,12 @@
                 return;
             }
 
+            // 부가 옵션 없이 URL 파라미터만 담아서 standard-edit 페이지로 바로 이동
             const params = new URLSearchParams({
-                url: rawUrl,
-                includeTitle: formData.get('includeTitle') === 'true',
-                includeBanner: formData.get('includeBanner') === 'true',
-                includeTags: formData.get('includeTags') === 'true'
+                url: rawUrl
             });
 
-            if (mode === 'single') {
-                window.location.href = `edit.html?${params.toString()}`;
-            } else {
-                params.append('format', formData.get('format'));
-                window.location.href = `standard-edit.html?${params.toString()}`;
-            }
+            window.location.href = `standard-edit.html?${params.toString()}`;
         });
     </script>
 </body>
