@@ -119,7 +119,7 @@ class StandardEditApp {
 
             // 7. 뷰어 스케일 적용
             Logger.log('INIT Applying viewer scale...', 'info');
-            this.applyViewerScale();
+            this.updateScaleAndLayout();
 
             // 8. 상호작용 설정
             Logger.log('INIT Setting up interaction...', 'info');
@@ -162,61 +162,53 @@ class StandardEditApp {
     renderPageBreakLines() {
         if (this.isPrinting) return;
 
-        // 기존 마커 및 배경 UI 모두 제거
         document.querySelectorAll('.page-break-line, .page-number-label, .page-break-marker, .page-background').forEach(el => el.remove());
-        
         const blocks = Array.from(this.contentArea.children).filter(el => el.classList.contains('notion-selectable-block'));
         
-        // 1. 기존에 시각적으로 부여된 분할용 여백(Margin) 초기화
         blocks.forEach(block => {
             if (block.dataset.pushedMargin) {
                 block.style.marginTop = block.dataset.originalMargin || '';
                 delete block.dataset.pushedMargin;
             }
-            delete block.dataset.isPageStart; // 추가됨: 자동 넘김 마커 초기화
+            delete block.dataset.isPageStart; 
         });
 
-        // 2. 뷰어 스케일을 고려한 실제 페이지 높이 계산 (contentWidthPx 기준 좌표계)
+        const margins = this.getMargins();
         const virtualPageHeight = this.pageHeightPx / this.viewerScale;
-        const pageGap = 50; // 종이와 종이 사이의 회색 간격(px)
-        const pagePaddingTop = 50; // content-area 상단 패딩
+        const pageGap = 50; 
         
-        // PDF 변환 시 콘텐츠가 밀리는 것을 방지하기 위한 안전 여백(Safety Margin) 추가
+        // [변경] 사용자가 입력한 여백을 스케일에 맞춰 반영
+        const pagePaddingTop = margins.top / this.viewerScale;
         const printSafetyMargin = 20; 
-        const pagePaddingBottom = 50 + printSafetyMargin; 
+        const pagePaddingBottom = (margins.bottom / this.viewerScale) + printSafetyMargin; 
         
         this.contentArea.style.background = 'transparent';
         this.contentArea.style.boxShadow = 'none';
         this.contentArea.style.paddingBottom = '0';
+        // [추가] 첫 번째 페이지의 Top Margin을 위해 contentArea에 패딩 탑 적용
+        this.contentArea.style.paddingTop = `${pagePaddingTop}px`;
         
         let currentPage = 0;
 
-        // 4. 블록 위치를 기반으로 페이지 강제 밀어내기 적용
         for (let i = 0; i < blocks.length; i++) {
             const block = blocks[i];
             const blockTop = block.offsetTop;
             const blockHeight = block.offsetHeight;
             
-            // 사용자 선택 분할 여부 확인
             const isManualBreak = i > 0 && this.selectedBreaks.has(parseInt(blocks[i - 1].dataset.blockIndex));
             
-            // 자동 분할 여부 확인
             const pageTopY = currentPage * (virtualPageHeight + pageGap);
             const pageBottomY = pageTopY + virtualPageHeight - pagePaddingBottom;
             
-            // 블록의 끝부분이 조금이라도 경계선을 넘거나 닿으려 하면 안전하게 다음 장으로 넘김
             const isAutoBreak = (blockTop + blockHeight) > pageBottomY; 
 
             if (isManualBreak || isAutoBreak) {
                 currentPage++;
-
                 block.dataset.isPageStart = 'true';
                 
-                // 다음 페이지가 시작될 정확한 Y 좌표
                 const nextTargetY = currentPage * (virtualPageHeight + pageGap) + pagePaddingTop;
                 const pushAmount = nextTargetY - blockTop;
                 
-                // 해당 블록에 마진을 주어 다음 종이 위치로 텍스트를 밀어냄
                 if (pushAmount > 0) {
                     block.dataset.originalMargin = block.style.marginTop;
                     block.dataset.pushedMargin = 'true';
@@ -227,7 +219,10 @@ class StandardEditApp {
 
         const totalPages = currentPage + 1;
 
-        // 5. 계산된 전체 높이를 기반으로 개별 종이 배경(A4) 렌더링
+        // [추가] 좌우 여백을 반영한 종이 배경 크기 계산
+        const paperWidthScaled = Utils.getPageWidth(this.format) / this.viewerScale;
+        const marginLeftScaled = margins.left / this.viewerScale;
+
         for (let pageNum = 0; pageNum < totalPages; pageNum++) {
             const pageTop = pageNum * (virtualPageHeight + pageGap);
             
@@ -235,8 +230,11 @@ class StandardEditApp {
             pageBg.className = 'page-background';
             pageBg.style.position = 'absolute';
             pageBg.style.top = `${pageTop}px`;
-            pageBg.style.left = '0';
-            pageBg.style.width = '100%';
+            
+            // [변경] 좌측 여백만큼 왼쪽으로 당겨서 전체 종이 너비 렌더링
+            pageBg.style.left = `-${marginLeftScaled}px`;
+            pageBg.style.width = `${paperWidthScaled}px`;
+            
             pageBg.style.height = `${virtualPageHeight}px`;
             pageBg.style.background = 'white';
             pageBg.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.15)';
@@ -399,14 +397,48 @@ class StandardEditApp {
 
     setupEventListeners() {
         this.generateBtn.addEventListener('click', () => this.onGenerateClick());
-        // 브라우저 리사이즈 시 다시 페이징 처리되도록 변경
         window.addEventListener('resize', () => this.updatePageBreakPreview());
 
-        // 포맷 변경 이벤트 리스너 추가
         if (this.formatSelect) {
             this.formatSelect.addEventListener('change', (e) => this.onFormatChange(e.target.value));
         }
 
+
+        ['marginTop', 'marginBottom', 'marginLeft', 'marginRight'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', (e) => {
+                    if (parseInt(e.target.value) < 0) {
+                        e.target.value = 0;
+                    }
+                    
+                    if (this.isPrinting) return;
+                    this.updateScaleAndLayout();
+                });
+            }
+        });
+    }
+
+    getMargins() {
+        return {
+            top: Math.max(0, parseInt(document.getElementById('marginTop')?.value) || 0),
+            bottom: Math.max(0, parseInt(document.getElementById('marginBottom')?.value) || 0),
+            left: Math.max(0, parseInt(document.getElementById('marginLeft')?.value) || 0),
+            right: Math.max(0, parseInt(document.getElementById('marginRight')?.value) || 0)
+        };
+        }
+    updateScaleAndLayout() {
+        if (!this.contentArea || this.isPrinting) return;
+        
+        const margins = this.getMargins();
+        const pageWidthPx = Utils.getPageWidth(this.format);
+        
+        // 좌우 여백을 뺀 '사용 가능한 너비'에 맞춰 콘텐츠 스케일링
+        const usableWidthPx = Math.max(100, pageWidthPx - margins.left - margins.right);
+        this.viewerScale = usableWidthPx / this.contentWidthPx;
+        
+        this.applyViewerScale();
+        this.updatePageBreakPreview();
     }
 
     onFormatChange(newFormat) {
@@ -426,7 +458,7 @@ class StandardEditApp {
         window.history.replaceState({}, '', url);
         
         // 3. 스케일 및 페이지 레이아웃 재적용
-        this.applyViewerScale();
+        this.updateScaleAndLayout();
         this.updatePageBreakPreview();
     }
 
@@ -449,6 +481,7 @@ class StandardEditApp {
                 this.loadingOverlay.style.display = 'none';
             } else {
                 const params = new URLSearchParams(window.location.search);
+                const margins = this.getMargins(); // 여백 값 가져오기
                 const payload = {
                     url: this.notionUrl,
                     mode: 'full',
@@ -456,7 +489,11 @@ class StandardEditApp {
                     pageBreaks: Array.from(this.selectedBreaks).map(Number),
                     includeTitle: params.get('includeTitle') === 'true',
                     includeBanner: params.get('includeBanner') === 'true',
-                    includeTags: params.get('includeTags') === 'true'
+                    includeTags: params.get('includeTags') === 'true',
+                    marginTop: margins.top,          // 추가
+                    marginBottom: margins.bottom,    // 추가
+                    marginLeft: margins.left,        // 추가
+                    marginRight: margins.right       // 추가
                 };
 
                 const response = await fetch('/convert-url', {
@@ -606,6 +643,8 @@ class StandardEditApp {
                 document.head.appendChild(printStyle);
             }
 
+            const margins = this.getMargins();
+
             // popup.js의 스타일과 브라우저 인쇄 제어 스타일 병합
             printStyle.innerHTML = `
                 ${freezeCSS}
@@ -624,9 +663,9 @@ class StandardEditApp {
 
                 @media print {
                     @page {
-                        /* === 수정된 부분: 정확한 밀리미터 치수로 강제 지정 === */
                         size: ${getPrintPageSize(this.format)};
-                        margin: 0;
+                        /* [수정] 사용자가 지정한 여백 적용 */
+                        margin: ${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px !important;
                     }
                     body {
                         margin: 0;
@@ -678,6 +717,7 @@ class StandardEditApp {
                         width: ${this.contentWidthPx}px !important;
                         margin: 0 auto !important;
                         display: block !important;
+                        padding: 0 !important; /* [추가] 브라우저 여백과 겹치지 않도록 미리보기 패딩 강제 초기화 */
                         zoom: ${this.viewerScale} !important;
                     }
                     
@@ -696,6 +736,10 @@ class StandardEditApp {
                     .auto-page-break {
                         page-break-before: always !important;
                         break-before: page !important;
+                    }
+
+                    #content-area > div.notion-selectable-block.selected-break.block-has-break > div::after {
+                        display: none !important;
                     }
                 }
             `;
