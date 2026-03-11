@@ -12,6 +12,15 @@ const Logger = (() => {
         debug: 'color: #8b5cf6',
         muted: 'color: #94a3b8; font-size: 11px'
     };
+    const isDev = false; // 개발 중일 때는 true, 배포 시에는 false
+
+    if (!isDev) {
+        console.log = () => {};
+        console.info = () => {};
+        console.warn = () => {};
+        console.error = () => {};
+        // error는 시스템 오류 확인을 위해 남겨두는 경우가 많습니다.
+    }
 
     return {
         logSection(title, type = 'title') {

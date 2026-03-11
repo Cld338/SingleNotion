@@ -918,7 +918,7 @@ class StandardEditApp {
 
             await document.fonts.ready;
             await new Promise(resolve => requestAnimationFrame(resolve));
-            await new Promise(resolve => setTimeout(resolve, 1500)); // 렌더링 대기
+            // await new Promise(resolve => setTimeout(resolve, 1500)); // 렌더링 대기
 
             this.loadingOverlay.style.display = 'none';
 
@@ -978,9 +978,9 @@ class StandardEditApp {
                     resolve(data.result);
                 } else if (data.status === 'failed' || data.status === 'error') {
                     eventSource.close();
-                    reject(new Error(data.error || '서버 변환 실패'));
+                    reject(new Error(data.error || 'PDF 변환 실패(응답 없음)'));
                 } else {
-                    if (statusText) statusText.innerText = `서버 작업 진행 중... (${data.status})`;
+                    if (statusText) statusText.innerText = `PDF 변환 진행 중...`;
                 }
             };
 
