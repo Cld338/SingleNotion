@@ -416,6 +416,7 @@ class StandardEditApp {
 
             block.addEventListener('click', (e) => {
                 if (this.format === 'SINGLE') return;
+                
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -654,7 +655,7 @@ class StandardEditApp {
             this.loadingOverlay.style.display = 'flex';
             
             // --- [수정할 부분 1] 인쇄 직전 레이아웃 원상 복구 ---
-            document.querySelectorAll('.page-break-marker, .page-number-label, #content-area').forEach(el => {
+            document.querySelectorAll('.page-break-marker, .page-number-label, .page-background').forEach(el => {
                 el.style.display = 'none';
             });
 
@@ -836,7 +837,7 @@ class StandardEditApp {
                         print-color-adjust: exact !important;
                     }
                     /* 1. 사이드바, 헤더 및 마커/라벨 등 인쇄에 불필요한 UI 요소 완벽 숨김 */
-                    .navbar, .editor-header, .sidebar, .loading-overlay,
+                    .editor-header, .sidebar, .loading-overlay,
                     .page-break-marker, .page-break-line, .page-number-label {
                         display: none !important;
                     }
