@@ -70,10 +70,17 @@ router.get('/preview-html', async (req, res) => {
             return res.status(400).json({ error: '유효하지 않은 URL입니다.' });
         }
 
+        // --- [추가된 부분] 옵션 파라미터 파싱 ---
+        const options = {
+            includeTitle: req.query.includeTitle === 'true',
+            includeBanner: req.query.includeBanner === 'true',
+            includeTags: req.query.includeTags === 'true'
+        };
+
         logger.info(`Loading preview for URL: ${url}`);
         
-        // 콘텐츠 너비, HTML 및 리소스 정보 추출
-        const previewData = await pdfService.getPreviewData(url);
+        // --- [수정된 부분] 옵션을 getPreviewData에 전달 ---
+        const previewData = await pdfService.getPreviewData(url, options);
         
         if (!previewData) {
             throw new Error('No preview data returned');

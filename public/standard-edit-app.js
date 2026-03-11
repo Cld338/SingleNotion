@@ -9,6 +9,11 @@ class StandardEditApp {
         this.notionUrl = params.get('url');
         this.format = params.get('format') || 'A4';
         this.mode = params.get('mode') || 'standard';
+        
+        // 추가: 제목, 배너, 속성 포함 여부 옵션
+        this.includeTitle = params.get('includeTitle') === 'true';
+        this.includeBanner = params.get('includeBanner') === 'true';
+        this.includeTags = params.get('includeTags') === 'true';
 
         // DOM Elements
         this.contentArea = document.getElementById('content-area');
@@ -16,15 +21,12 @@ class StandardEditApp {
         this.generateBtn = document.getElementById('generate-btn');
         this.loadingOverlay = document.getElementById('loading-spinner');
 
-        this.formatSelect = document.getElementById('format-select'); // 추가됨
-
         // State
         this.selectedBreaks = new Set();
         this.pageHeightPx = Utils.getPageHeight(this.format);
         this.contentWidthPx = 1080;
         this.viewerScale = 1;
-        this.isPrinting = false; // 추가된 코드
-        
+        this.isPrinting = false;
 
         this.init();
     }
@@ -32,12 +34,13 @@ class StandardEditApp {
     async init() {
         try {
             Logger.log(`INIT Starting for URL: ${this.notionUrl}`, 'info');
-            // document.getElementById('format-badge').innerText = this.format;
             if (this.formatSelect) {
                 this.formatSelect.value = this.format;
             }
 
-            const response = await fetch(`/preview-html?url=${encodeURIComponent(this.notionUrl)}`);
+            // 수정: API 요청 URL에 파라미터 추가
+            const requestUrl = `/preview-html?url=${encodeURIComponent(this.notionUrl)}&includeTitle=${this.includeTitle}&includeBanner=${this.includeBanner}&includeTags=${this.includeTags}`;
+            const response = await fetch(requestUrl);
 
             if (!response.ok) {
                 const errorData = await response.json();
@@ -93,8 +96,12 @@ class StandardEditApp {
             // 4. HTML 주입
             Logger.log('INIT Injecting HTML...', 'info');
             this.contentArea.innerHTML = html;
+
             this.loadingSpinner.style.display = 'none';
             this.contentArea.style.display = 'block';
+
+            
+
 
             // 5. 상대 경로 수정
             Logger.log('INIT Fixing relative paths...', 'info');

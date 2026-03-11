@@ -86,7 +86,7 @@ class PdfService {
     }
 
     // 노션 페이지의 콘텐츠 너비 및 HTML 측정 (미리보기용)
-    async getPreviewData(url) {
+    async getPreviewData(url, options={}) {
         const browser = await browserPool.acquire();
         let page = null;
 
@@ -165,10 +165,76 @@ class PdfService {
             logger.info('CSS and JS loading completed');
 
             // 콘텐츠 너비, HTML 및 필요한 리소스 추출
-            const result = await page.evaluate(() => {
+            const result = await page.evaluate((opts) => {
+                const { includeTitle, includeBanner, includeTags } = opts;
+                
                 const contentEl = document.querySelector('.notion-page-content');
                 const width = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
-                const html = contentEl ? contentEl.innerHTML : '';
+                
+                // --- [수정된 부분] 옵션에 따라 HTML 블록들을 추출하여 병합 ---
+                let htmlParts = [];
+                let addedElements = new Set();
+                
+                // 중복 추출을 방지하기 위한 헬퍼 함수
+                const pushElement = (el) => {
+                    if (el && !addedElements.has(el)) {
+                        htmlParts.push(el.outerHTML);
+                        addedElements.add(el);
+                    }
+                };
+
+                // --- [추가된 부분] (0) 전역 SVG 심볼(Sprite) 추출 ---
+                // 노션 문서 내에 숨겨진 아이콘/도형 정의들을 찾아 함께 포함시킵니다.
+                document.querySelectorAll('svg symbol, svg defs').forEach(el => {
+                    const parentSvg = el.closest('svg');
+                    if (parentSvg && !addedElements.has(parentSvg)) {
+                        const clone = parentSvg.cloneNode(true);
+                        // 미리보기 레이아웃을 해치지 않도록 완전히 숨김 처리
+                        clone.style.display = 'none';
+                        clone.style.position = 'absolute';
+                        clone.style.width = '0';
+                        clone.style.height = '0';
+                        htmlParts.push(clone.outerHTML);
+                        addedElements.add(parentSvg);
+                    }
+                });
+                // ---------------------------------------------------
+
+                // (1) 배너 및 아이콘
+                if (includeBanner) {
+                    const cover = document.querySelector('.notion-page-cover-wrapper');
+                    pushElement(cover);
+                    
+                    const icon = document.querySelector('.notion-record-icon');
+                    if (icon) {
+                        const iconBlock = icon.closest('.notion-page-block') || icon;
+                        pushElement(iconBlock);
+                    }
+                }
+                
+                // (2) 제목
+                if (includeTitle) {
+                    const h1 = document.querySelector('h1');
+                    if (h1) {
+                        const titleBlock = h1.closest('.notion-page-block') || h1;
+                        pushElement(titleBlock);
+                    }
+                }
+                
+                // (3) 페이지 속성 (태그)
+                if (includeTags) {
+                    const tags = document.querySelector('div[aria-label="페이지 속성"], div[aria-label="Page properties"]');
+                    if (tags) pushElement(tags);
+                }
+                
+                // (4) 메인 콘텐츠 블록들 (기존의 내용)
+                if (contentEl) {
+                    htmlParts.push(contentEl.innerHTML);
+                }
+                
+                // 모든 파트를 순서대로 하나의 HTML 문자열로 병합
+                const html = htmlParts.join('\n');
+                // -------------------------------------------------------------
                 
                 // 필요한 모든 리소스 수집
                 const resources = {
@@ -372,7 +438,7 @@ class PdfService {
                     resources: resources,
                     debug: debugInfo
                 };
-            });
+            }, options);
 
             logger.info(`getPreviewData - Debug: ${JSON.stringify(result.debug)}`);
             logger.info(`getPreviewData - Width: ${result.detectedWidth}`);
