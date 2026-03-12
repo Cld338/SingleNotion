@@ -19,6 +19,9 @@
     <meta name="twitter:image" content="https://notion-pdf.cld338.me/og-image.png">
 
     
+    <script src="https://unpkg.com/typed.js@2.0.16/dist/typed.umd.js"></script>
+
+    
 
     <script type="application/ld+json">
     {
@@ -59,55 +62,58 @@
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-K9MKRKP8"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <!-- End Google Tag Manager (noscript) -->
+
+
+    
     <nav class="navbar">
         <div class="nav-container">
             <a href="#" class="logo">
                 <i class="fa-solid fa-file-pdf"></i> Single Notion
             </a>
+            <a href="how-to-use.html" class="nav-link">사용 방법</a>
         </div>
     </nav>
 
     <main class="main-content">
-        <header class="hero">
-            <div class="container fade-in">
-            
-                <h1 class="title">노션 문서를<br><span>보이는 그대로 PDF</span>로</h1>
-                <p class="subtitle">페이지 분할로 인한 불편함 없이, 원하는 형식으로 깔끔하게 저장합니다.</p>
+        <section class="hero">
+            <div class="container fade-in-up">
+                <div class="badge">A4 출력이 추가되었습니다.✨</div>
+                <h1 class="title">노션 문서를<br><span class="highlight"><span class="typed-text"></span></span></h1>
+                <p class="subtitle">단일 페이지부터 표준 규격(A4)까지,<br>링크 하나로 노션 페이지를 가장 깔끔한 PDF로 저장하세요.</p>
                 
-                <div class="converter-card fade-in-up">
-                    <form id="convertForm">
-                        <div class="input-label">노션 페이지 주소</div>
-                        <div class="input-group">
-                            <i class="fa-solid fa-link"></i>
-                            <input type="text" id="url" name="url" placeholder="https://www.notion.so/..." required>
-                        </div>
-                        <button type="submit" id="submitBtn" class="main-btn">
-                            <span>PDF 변환하기</span>
-                            <i class="fa-solid fa-arrow-right"></i>
+                <form id="convertForm" class="url-input-wrapper">
+                    <div class="input-inner">
+                        <i class="fa-solid fa-link input-icon"></i>
+                        <input type="text" id="url" name="url" placeholder="노션 페이지 링크를 붙여넣으세요 (공유 상태 확인)" required>
+                        <button type="submit" id="submitBtn" class="submit-btn">
+                            변환하기 <i class="fa-solid fa-arrow-right"></i>
                         </button>
-                    </form>
-                </div>
+                    </div>
+                </form>
+                <p class="helper-text"><i class="fa-solid fa-circle-info"></i> 우측 상단 '공유'에서 <strong>게시(웹에서 게시)</strong> 또는 <strong>링크가 있는 모든 사용자</strong> 상태여야 합니다.</p>
             </div>
-        </header>
+        </section>
 
         <section id="how-it-works" class="features">
             <div class="container">
-                <h2 class="section-title">3초 만에 시작하기</h2>
                 <div class="feature-grid">
-                    <div class="feature-item fade-in-up">
+                    <div class="feature-card fade-in-up" style="animation-delay: 0.1s;">
+                        <div class="step-number">01</div>
                         <div class="icon-box"><i class="fa-solid fa-share-nodes"></i></div>
-                        <h3>1. 링크 공유</h3>
-                        <p>노션 우측 상단 '공유'에서<br>"링크가 있는 모든 사용자"를 선택하세요.</p>
+                        <h3>링크 공유 설정</h3>
+                        <p>노션 우측 상단의 '공유' 메뉴에서<br>'웹에서 게시' 또는 권한을 활성화하세요.</p>
                     </div>
-                    <div class="feature-item fade-in-up" style="animation-delay: 0.1s;">
-                        <div class="icon-box"><i class="fa-solid fa-copy"></i></div>
-                        <h3>2. URL 복사</h3>
-                        <p>페이지의<br>링크를 복사하고 입력하세요.</p>
+                    <div class="feature-card fade-in-up" style="animation-delay: 0.2s;">
+                        <div class="step-number">02</div>
+                        <div class="icon-box"><i class="fa-solid fa-paste"></i></div>
+                        <h3>URL 붙여넣기</h3>
+                        <p>복사한 노션 페이지의 링크를<br>메인 화면의 입력창에 붙여넣습니다.</p>
                     </div>
-                    <div class="feature-item fade-in-up" style="animation-delay: 0.2s;">
-                        <div class="icon-box"><i class="fa-solid fa-file-arrow-down"></i></div>
-                        <h3>3. PDF 편집</h3>
-                        <p>변환 버튼을 누르면<br>편집 페이지로 이동합니다.</p>
+                    <div class="feature-card fade-in-up" style="animation-delay: 0.3s;">
+                        <div class="step-number">03</div>
+                        <div class="icon-box"><i class="fa-solid fa-sliders"></i></div>
+                        <h3>옵션 조절 및 저장</h3>
+                        <p>단일 페이지 또는 표준 규격을 선택하고<br>고품질 PDF로 다운로드하세요.</p>
                     </div>
                 </div>
             </div>
@@ -116,22 +122,23 @@
 
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2026 Single Notion.</p>
-            <!-- <a href="https://www.threads.net/@oh_my.dev" target="_blank" class="badge-link">
-                <img alt="Threads" src="https://img.shields.io/badge/Threads-000000?style=flat-square&logo=threads&logoColor=white">
-            </a> -->
+            <div class="footer-content">
+                <p class="copyright">&copy; 2026 Single Notion. All rights reserved.</p>
+            </div>
         </div>
     </footer>
 
-    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
-        <div class="loader-content">
-            <div class="spinner"></div>
-            <p class="loading-text">PDF를 생성하는 중입니다...</p>
-            <p class="loading-subtext">잠시만 기다려 주세요 (최대 1분 소요)</p>
-        </div>
-    </div>
 
     <script>
+        // Typed.js 초기화 - 한 번만 실행되도록 loop 옵션 변경
+        var typed = new Typed('.typed-text', {
+            strings: ['보이는 그대로', '노션답게', 'PDF로 변환하기'],
+            typeSpeed: 60,
+            backSpeed: 30,
+            loop: false, // 이 부분을 false로 변경
+            backDelay: 2000
+        });
+
         document.getElementById('convertForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
@@ -146,7 +153,6 @@
                 return;
             }
 
-            // 부가 옵션 없이 URL 파라미터만 담아서 standard-edit 페이지로 바로 이동
             const params = new URLSearchParams({
                 url: rawUrl
             });

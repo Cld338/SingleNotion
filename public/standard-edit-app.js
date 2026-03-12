@@ -104,6 +104,17 @@ class StandardEditApp {
             Logger.log('INIT Injecting HTML...', 'info');
             this.contentArea.innerHTML = html;
 
+            const targetElements = this.contentArea.querySelectorAll('.notion-table-content');
+            targetElements.forEach(el => {
+                el.style.paddingLeft = '0px';
+                el.style.paddingRight = '0px';
+            });
+            targetElements.forEach(el => {
+                const ancestor = el.parentElement?.parentElement?.parentElement?.parentElement;
+                if (ancestor) {
+                    ancestor.style.width = '';
+                }
+            });
             
 
 
