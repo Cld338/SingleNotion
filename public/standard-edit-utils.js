@@ -162,7 +162,6 @@ const Utils = {
             .notion-divider { border: 0; border-top: 1px solid #e0e0e0; margin: 16px 0; }
             .notion-image { max-width: 100%; height: auto; margin: 8px 0; }
             .notion-bookmark { padding: 12px; background: #f5f5f5; border-radius: 4px; margin: 8px 0; }
-            .notion-code-block { background: #f6f8fa; padding: 12px; border-radius: 4px; overflow-x: auto; }
             .notion-quote { border-left: 4px solid #6366f1; padding-left: 12px; margin: 8px 0; }
         `;
 

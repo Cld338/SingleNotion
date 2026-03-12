@@ -257,12 +257,6 @@ body {
     margin: 8px 0;
 }
 
-.notion-code-block {
-    background: #f6f8fa;
-    padding: 12px;
-    border-radius: 4px;
-    overflow-x: auto;
-}
 
 .notion-quote {
     border-left: 4px solid #6366f1;
