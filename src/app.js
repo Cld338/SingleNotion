@@ -34,7 +34,11 @@ app.use(express.static(path.join(__dirname, '../public'), {
             res.set('Cache-Control', 'public, max-age=31536000, immutable');
             res.set('Access-Control-Allow-Origin', '*');
         }
+        if (filePath.match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
+            res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+        }
     }
+    
 }));
 
 console.log(path.join(__dirname, '../public'));

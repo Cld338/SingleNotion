@@ -200,6 +200,21 @@ body {
     color: var(--text-main);
     outline: none;
     width: 100%;
+    
+    /* 브라우저 기본 박스 스타일 제거 */
+    -webkit-appearance: none;
+    appearance: none;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+/* 브라우저 자동완성(Autofill) 시 나타나는 불필요한 배경 박스 제거 */
+.input-inner input:-webkit-autofill,
+.input-inner input:-webkit-autofill:hover, 
+.input-inner input:-webkit-autofill:focus, 
+.input-inner input:-webkit-autofill:active {
+    -webkit-text-fill-color: var(--text-main) !important;
+    transition: background-color 5000s ease-in-out 0s;
 }
 
 .input-inner input::placeholder {
@@ -273,7 +288,7 @@ body {
     right: 32px;
     font-size: 3rem;
     font-weight: 800;
-    color: var(--surface-color);
+    color: var(--text-muted);
     line-height: 1;
     z-index: 0;
 }
