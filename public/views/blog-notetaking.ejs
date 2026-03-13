@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>노션 문서, 노트 필기, 잘림 없이 한 장으로 끝내는 가장 깔끔한 방법 | Single Notion</title>
+    <meta name="description" content="노션 문서를 필기 앱으로 가져올 때 발생하는 페이지 끊김 문제를 해결하고, 굿노트나 삼성노트에서 깔끔하게 필기하는 구체적인 방법을 다룬다.">
+    <meta name="keywords" content="노션, Notion, 노션 필기, 굿노트, 삼성노트, PDF, 아이패드 노션">
+    <meta name="author" content="Single Notion">
+    
+    <link rel="canonical" href="https://notion-pdf.cld338.me/blog-how-to-notetaking.html">
+
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="노션 문서 위에 필기하는 법: 잘림 없는 PDF 불러오기">
+    <meta property="og:description" content="노션 페이지를 한 장의 긴 PDF로 변환하여 필기 앱에서 끊김 없이 사용하는 워크플로우를 소개한다.">
+    <meta property="og:image" content="https://notion-pdf.cld338.me/images/og-image-new.png">
+    <meta property="og:url" content="https://notion-pdf.cld338.me/blog-how-to-notetaking.html">
+    <meta property="og:site_name" content="Single Notion">
+
+    <link rel="icon" href="/images/favicon.png" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.260313.css">
+    <%- include('partials/analytics-head') %>
+</head>
+<body>
+    <%- include('partials/analytics-body') %>
+    <div class="background-pattern"></div>
+
+    <%- include('partials/navbar') %>
+
+    <main class="main-content">
+        <section class="hero" style="padding-bottom: 40px;">
+            <div class="container fade-in-up">
+                <h1 class="title" style="font-size: clamp(2rem, 4vw, 3rem);">노션 문서 위에 필기하는 법:<br><span class="highlight">깔끔한 불러오기</span>부터 시작하자</h1>
+                <p class="subtitle">굿노트나 삼성노트에서 노션 문서를 열었을 때 내용이 잘려 당황했다면, 이 가이드를 따라보자.</p>
+            </div>
+        </section>
+        
+        <section class="features" style="padding-top: 0;">
+            <div class="container fade-in-up" style="max-width: 900px; animation-delay: 0.2s;">
+                
+                <article class="feature-card" style="padding: 3.5rem 4rem; margin-bottom: 2rem;">
+                    <div class="icon-box" style="margin-bottom: 2rem; width: 64px; height: 64px; font-size: 1.6rem;">
+                        <i class="fa-solid fa-file-import"></i>
+                    </div>
+                    
+                    <div style="margin-bottom: 3.5rem;">
+                        <h2 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 1.5rem; color: var(--text-main); letter-spacing: -0.02em;">
+                            왜 노션의 기본 PDF 내보내기는 필기하기 불편할까?
+                        </h2>
+                        <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem; margin-bottom: 1.5rem;">
+                            노션에서 기본적으로 제공하는 'PDF로 내보내기' 기능을 사용하면 문서를 강제로 A4 종이 크기에 맞춰 자른다. 이 과정에서 공들여 작성한 표가 반으로 갈리거나, 문장 중간이 끊기는 현상이 발생한다. 필기 앱으로 가져갔을 때 가장 거슬리는 부분이다.
+                        </p>
+                    </div>
+
+                    <div style="margin-bottom: 3.5rem;">
+                        <h3 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 1.2rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-list-check" style="color: var(--primary-color);"></i> 노션 문서를 필기 앱으로 가져오는 3단계
+                        </h3>
+                        
+                        <div style="margin-top: 2rem;">
+                            <h4 style="font-size: 1.2rem; color: var(--text-main); margin-bottom: 0.5rem;">1단계: 노션 페이지 링크 복사하기</h4>
+                            <p style="color: var(--text-muted); line-height: 1.7; margin-bottom: 1.5rem;">
+                                필기하고 싶은 노션 페이지 우측 상단의 '공유' 버튼을 눌러 웹 게시를 활성화한 후, 링크를 복사한다.
+                            </p>
+
+                            <h4 style="font-size: 1.2rem; color: var(--text-main); margin-bottom: 0.5rem;">2단계: Single Notion에서 '단일 페이지'로 변환하기</h4>
+                            <p style="color: var(--text-muted); line-height: 1.7; margin-bottom: 1rem;">
+                                Single Notion에 접속해 링크를 붙여넣는다. 이때 우측 옵션에서 포맷을 <strong>'SINGLE'</strong>로 설정하는 것이 핵심이다. 
+                            </p>
+                            <div style="background: #f8fafc; padding: 1.2rem; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid #e2e8f0;">
+                                <p style="font-size: 0.95rem; color: #475569; margin-bottom: 0.5rem;"><strong>💡 더 깔끔하게 불러오는 팁:</strong></p>
+                                <ul style="list-style: none; font-size: 0.9rem; color: #64748b; padding-left: 0;">
+                                    <li style="margin-bottom: 0.3rem;"><i class="fa-solid fa-check" style="color: #10b981;"></i> <strong>제목/배너 숨기기:</strong> 필기 공간을 더 확보하고 싶다면 '제목 포함', '배너 포함' 체크박스를 해제하자.</li>
+                                    <li><i class="fa-solid fa-check" style="color: #10b981;"></i> <strong>태그 숨기기:</strong> 페이지 상단의 속성 값이 필요 없다면 '태그 포함'도 해제하여 깔끔한 본문만 남길 수 있다.</li>
+                                </ul>
+                            </div>
+
+                            <h4 style="font-size: 1.2rem; color: var(--text-main); margin-bottom: 0.5rem;">3단계: 필기 앱에서 PDF 불러오기</h4>
+                            <p style="color: var(--text-muted); line-height: 1.7;">
+                                생성된 PDF를 다운로드한 뒤, 굿노트나 삼성노트에서 '가져오기'를 선택한다. 단일 페이지로 생성된 문서는 페이지 구분선 없이 하나로 이어져 있어, 마치 웹페이지 위에 직접 쓰는 듯한 경험을 준다.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 3.5rem;">
+                        <h3 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 1.2rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-star" style="color: var(--primary-color);"></i> 필기 앱 설정 팁
+                        </h3>
+                        <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem;">
+                            <strong>굿노트(GoodNotes)</strong>를 사용한다면 '스크롤 방향'을 <strong>수직</strong>으로 설정해 보자. Single Notion으로 만든 긴 단일 페이지 문서를 위아래로 훑으며 끊김 없이 필기하기에 가장 최적화된 설정이다.
+                        </p>
+                    </div>
+                </article>
+                
+                <div style="text-align: center; margin-top: 4rem;">
+                    <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-weight: 500;">이제 잘림 걱정 없이 노션 위에 생각을 적어보자.</p>
+                    <a href="index.html" class="submit-btn" style="text-decoration: none; padding: 18px 40px; font-size: 1.2rem; display: inline-flex; align-items: center; gap: 10px;">
+                        단일 페이지 PDF 만들기 <i class="fa-solid fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <%- include('partials/footer') %>
+</body>
+</html>

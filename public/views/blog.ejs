@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog | Single Notion</title>
+    <link rel="icon" href="/images/favicon.png" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.260313.css">
+    <%- include('partials/analytics-head') %>
+</head>
+<body>
+    <%- include('partials/analytics-body') %>
+    <div class="background-pattern"></div>
+
+    <%- include('partials/navbar') %>
+
+    <main class="main-content">
+        <section class="hero" style="padding-bottom: 40px;">
+            <div class="container fade-in-up">
+                <h1 class="title" style="font-size: clamp(2rem, 4vw, 3rem);">Single Notion <span class="highlight">Blog</span></h1>
+                <p class="subtitle">서비스 업데이트 소식과 관련 기술 이야기를 전합니다.</p>
+            </div>
+        </section>
+        
+        <section class="features" style="padding-top: 0;">
+            <div class="container fade-in-up" style="max-width: 900px; animation-delay: 0.2s;">
+                
+                <article class="feature-card" style="padding: 2.5rem; margin-bottom: 2rem; cursor: pointer; transition: transform 0.2s;" onclick="location.href='/blog-comparsion.html'" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
+                    <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem; color: var(--text-main);">노션 PDF 내보내기 페이지 끊김 문제와 해결 방법</h2>
+                    <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">노션의 무한 캔버스 구조로 인해 발생하는 PDF 내보내기 페이지 끊김 현상의 기술적 원인과 Single Notion의 심리스한 단일 페이지 변환 기술을 소개합니다.</p>
+                    <span style="color: var(--primary-color); font-weight: 600; font-size: 0.95rem;">글 읽기 <i class="fa-solid fa-arrow-right" style="margin-left: 5px;"></i></span>
+                </article>
+
+                </div>
+        </section>
+    </main>
+
+    <%- include('partials/footer') %>
+</body>
+</html>

@@ -97,6 +97,7 @@ app.get('/sitemap.xml', (req, res) => {
     // 허용된 페이지 목록 (우선 메인 페이지 포함)
     const allowedPages = [
         { url: '/', changefreq: 'weekly', priority: '1.0' },
+        { url: '/blog.html', changefreq: 'weekly', priority: '0.9' }, // 신규 추가된 블로그 목록 페이지
         { url: '/blog-comparsion.html', changefreq: 'weekly', priority: '0.8' }, // 이 줄을 추가합니다.
         { url: '/faq.html', changefreq: 'weekly', priority: '0.8' }
         // 추가 페이지 예시: { url: '/docs', changefreq: 'weekly', priority: '0.8' }
