@@ -3,7 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>노션 PDF 내보내기 한계와 해결책 | Single Notion</title>
+    
+    <title>노션 PDF 내보내기 페이지 끊김 문제와 해결 방법 | Single Notion</title>
+    <meta name="description" content="노션의 무한 캔버스 구조로 인해 발생하는 PDF 내보내기 페이지 끊김 현상의 기술적 원인과 Single Notion의 심리스한 단일 페이지 변환 기술을 소개합니다.">
+    <meta name="keywords" content="노션 PDF 변환, 노션 PDF 내보내기, 노션 페이지 끊김, Single Notion, 노션 포트폴리오 PDF, 노션 이력서 PDF">
+    <meta name="author" content="Single Notion">
+    
+    <link rel="canonical" href="https://singlenotion.com/blog-comparsion.html">
+
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="노션 PDF 내보내기 한계와 해결책: 단일 페이지 PDF의 가치">
+    <meta property="og:description" content="노션 문서의 가독성을 결정짓는 페이지 분할 문제, 이제 Single Notion의 동적 확장 기술로 해결하세요.">
+    <meta property="og:image" content="https://singlenotion.com/og-image-new.png">
+    <meta property="og:url" content="https://singlenotion.com/blog-comparsion.html">
+    <meta property="og:site_name" content="Single Notion">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="노션 PDF 내보내기 한계와 해결책 | Single Notion">
+    <meta name="twitter:description" content="웹 렌더링 엔진 기반의 끊김 없는 노션 PDF 변환 경험을 제공합니다.">
+    <meta name="twitter:image" content="https://singlenotion.com/og-image-new.png">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      "headline": "노션 PDF 내보내기 한계와 해결책: 단일 페이지 PDF의 가치",
+      "description": "노션의 캔버스 구조를 단일 페이지 PDF로 변환하는 기술적 차이 분석",
+      "image": "https://singlenotion.com/og-image-new.png",
+      "author": {
+        "@type": "Organization",
+        "name": "Single Notion"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Single Notion",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://singlenotion.com/favicon.png"
+        }
+      },
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://singlenotion.com/blog-comparsion.html"
+      },
+    }
+    </script>
+
     <link rel="icon" href="/favicon.png" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -15,7 +60,7 @@
     <nav class="navbar">
         <div class="nav-container">
             <a href="index.html" class="logo">
-                <img src="/favicon.png" alt="Single Notion Logo" style="width: 30px; height: 30px; margin-right: -5px; vertical-align: middle;"> Single Notion
+                <img src="/favicon.png" alt="Single Notion 공식 로고" style="width: 30px; height: 30px; margin-right: -5px; vertical-align: middle;"> Single Notion
             </a>
             <div class="nav-links" style="display: flex; gap: 1.5rem; align-items: center;">
                 <a href="how-to-use.html" class="nav-link">사용 방법</a>
@@ -27,7 +72,7 @@
     <main class="main-content">
         <section class="hero" style="padding-bottom: 40px;">
             <div class="container fade-in-up">
-                <h1 class="title" style="font-size: clamp(2rem, 4vw, 3rem);">끊김 없는 몰입의 경험,<br><span class="highlight">단일 페이지 PDF</span></h1>
+                <h1 class="title" style="font-size: clamp(2rem, 4vw, 3rem);">노션 PDF 내보내기,<br>끊김 없는 <span class="highlight">단일 페이지 PDF</span>의 가치</h1>
                 <p class="subtitle">노션의 무한한 캔버스를 PDF라는 정적인 틀에 가두지 마세요. 가독성을 결정짓는 기술적 차이를 분석합니다.</p>
             </div>
         </section>
@@ -45,7 +90,7 @@
                             왜 노션의 기본 PDF로는 부족할까요?
                         </h2>
                         <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem; margin-bottom: 1.5rem;">
-                            노션은 웹 기반의 <strong>'무한 캔버스(Infinite Canvas)'</strong> 구조를 가지고 있습니다. 하지만 일반적인 PDF 변환 엔진은 이를 강제로 A4(210x297mm)라는 물리적 종이 규격에 맞춰 자릅니다. 이 과정에서 발생하는 '페이지 분할'은 단순한 여백의 문제가 아닙니다.
+                            노션은 웹 기반의 <strong>'무한 캔버스(Infinite Canvas)'</strong> 구조를 가지고 있습니다. 하지만 일반적인 PDF 변환 엔진은 이를 강제로 A4라는 물리적 종이 규격에 맞춰 자릅니다. 이 과정에서 발생하는 '페이지 분할'은 단순한 여백의 문제가 아닙니다.
                         </p>
                         <div style="background: #f1f5f9; padding: 1.5rem; border-radius: 12px; border-left: 4px solid #ef4444;">
                             <ul style="list-style: none; color: #475569; font-size: 0.95rem; line-height: 1.6;">
@@ -61,26 +106,47 @@
                             <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--primary-color);"></i> SingleNotion의 접근 방식
                         </h3>
                         <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem;">
-                            SingleNotion은 <strong>'브라우저 뷰포트 동적 확장'</strong> 기술을 사용합니다. 문서를 출력용 엔진이 아닌 웹 렌더링 엔진으로 먼저 해석하며, 문서의 전체 길이를 픽셀 단위로 정확히 계산하여 하나의 연속된 비트맵/벡터 레이어로 결합합니다.
+                            SingleNotion은 <strong>'브라우저 뷰포트 동적 확장'</strong> 기술을 사용합니다. 문서를 출력용 엔진이 아닌 웹 렌더링 엔진으로 먼저 해석하며, 문서의 전체 길이를 픽셀 단위로 정확히 계산하여 하나의 연속된 레이어로 결합합니다.
                         </p>
+
+                        <div class="video-container" style="margin: 2.5rem 0; text-align: center;">
+                            <div style="background: #000; border-radius: 16px; aspect-ratio: 16/9; width: 100%; max-width: 800px; margin: 0 auto; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); border: 1px solid #334155;">
+                                <video width="100%" height="100%" controls title="SingleNotion을 이용한 노션 PDF 변환 과정 시연" poster="/api/placeholder/800/450">
+                                    <source src="https://notion-pdf.cld338.me/video/sample.mp4" type="video/mp4">
+                                    브라우저가 비디오 태그를 지원하지 않습니다.
+                                </video>
+                            </div>
+                            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 1rem;"><i class="fa-solid fa-circle-info" style="margin-right: 5px;"></i> 영상을 통해 변환 과정을 확인하실 수 있습니다.</p>
+                        </div>
+
                         <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem; margin-top: 1rem;">
-                            결과적으로 변환된 PDF는 마치 웹사이트를 그대로 스크롤하는 듯한 <strong>'심리스(Seamless)'</strong>한 경험을 제공합니다. 이는 이력서나 포트폴리오를 검토하는 인사 담당자나 클라이언트에게 정보의 흐름을 끊김 없이 전달할 수 있음을 의미합니다.
+                            결과적으로 변환된 PDF는 마치 웹사이트를 그대로 스크롤하는 듯한 경험을 제공합니다. 이는 이력서나 포트폴리오를 검토하는 과정에서 정보의 흐름을 끊김 없이 전달할 수 있음을 의미합니다.
                         </p>
                     </div>
 
-                    <div>
-                        <h3 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 1.2rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
-                            <i class="fa-solid fa-display" style="color: var(--primary-color);"></i> 화면 중심 시대의 새로운 표준
-                        </h3>
-                        <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem; margin-bottom: 1.5rem;">
-                            오늘날 문서의 90% 이상은 종이가 아닌 모니터와 모바일 화면에서 소비됩니다. 물리적 종이 규격에 얽매인 페이지 분할은 오히려 화면 열람 시 불필요한 스크롤 저항과 시각적 단절을 초래합니다.
+                    <div style="background: #f8fafc; border-radius: 20px; padding: 2.5rem; border: 1px solid #e2e8f0; margin-bottom: 3.5rem;">
+                        <h4 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-main);">
+                            <i class="fa-solid fa-microscope" style="color: var(--primary-color); margin-right: 8px;"></i> 개발자 노트: 왜 픽셀 단위 계산이 중요한가?
+                        </h4>
+                        <p style="color: #64748b; line-height: 1.7; font-size: 1rem; margin-bottom: 1.2rem;">
+                            기본적인 PDF 내보내기는 웹의 유연한 레이아웃을 '종이'라는 고정된 규격에 맞추기 위해 강제로 DOM 요소를 절단합니다. SingleNotion은 이를 방지하기 위해 가상의 <strong>헤드리스 브라우저(Headless Browser)</strong> 상에서 전체 페이지의 렌더링 높이를 동적으로 측정합니다.
                         </p>
+                        <ul style="list-style: none; padding: 0; color: #64748b; font-size: 0.95rem;">
+                            <li style="margin-bottom: 0.6rem; display: flex; align-items: flex-start; gap: 10px;">
+                                <i class="fa-solid fa-check" style="color: #10b981; margin-top: 4px;"></i>
+                                <span><strong>레이아웃 보존:</strong> 폰트 렌더링 엔진의 차이로 발생하는 미세한 줄 바꿈 오차까지 완벽하게 잡아냅니다.</span>
+                            </li>
+                            <li style="margin-bottom: 0.6rem; display: flex; align-items: flex-start; gap: 10px;">
+                                <i class="fa-solid fa-check" style="color: #10b981; margin-top: 4px;"></i>
+                                <span><strong>고해상도 최적화:</strong> 이미지 선명도를 유지하면서도 파일 용량을 최적화하는 래스터화 알고리즘을 적용했습니다.</span>
+                            </li>
+                        </ul>
                     </div>
                 </article>
                 
                 <div style="text-align: center; margin-top: 4rem;">
                     <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-weight: 500;">지금 당신의 노션 문서를 전문가의 수준으로 격상시키세요.</p>
-                    <a href="index.html" class="submit-btn" style="text-decoration: none; padding: 18px 40px; font-size: 1.2rem; display: inline-flex;">
+                    <a href="index.html" class="submit-btn" style="text-decoration: none; padding: 18px 40px; font-size: 1.2rem; display: inline-flex; align-items: center; gap: 10px;">
                         단일 페이지 PDF로 지금 변환 <i class="fa-solid fa-arrow-right"></i>
                     </a>
                 </div>
