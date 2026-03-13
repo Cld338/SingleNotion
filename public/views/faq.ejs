@@ -55,18 +55,7 @@
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <a href="/" class="logo">
-                <img src="/images/favicon.png" alt="Single Notion Logo" style="width: 30px; height: 30px; margin-right: -5px; vertical-align: middle;"> Single Notion
-            </a>
-            <div class="nav-links" style="display: flex; gap: 1.5rem; align-items: center;">
-                <a href="how-to-use.html" class="nav-link">사용 방법</a>
-                <a href="blog-comparsion.html" class="nav-link">Blog</a>
-                <a href="faq.html" class="nav-link">FAQ</a>
-            </div>
-        </div>
-    </nav>
+    <%- include('partials/navbar') %>
 
     <main class="main-content">
         <div class="faq-container">
@@ -89,12 +78,6 @@
         </div>
     </main>
 
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <p class="copyright">&copy; 2026 Single Notion. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
+    <%- include('partials/footer') %>
 </body>
 </html>

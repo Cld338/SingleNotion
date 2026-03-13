@@ -26,7 +26,11 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, '../public/views'));
+
 app.use(express.static(path.join(__dirname, '../public'), {
+    index: false,
     setHeaders: (res, filePath, stat) => {
         // WOFF2 폰트 파일의 올바른 Content-Type 설정
         if (filePath.endsWith('.woff2')) {
@@ -69,7 +73,19 @@ app.use(process.env.BULL_BOARD_PATH || '/admin/queues', adminRoutes);
 app.use('/', pdfRoutes);
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public', 'index.html'));
+    res.render('index');
+});
+
+// .html 확장자 요청을 처리하여 해당 이름의 .ejs 파일을 렌더링
+app.get('/:page.html', (req, res) => {
+    const page = req.params.page;
+    res.render(page, (err, html) => {
+        if (err) {
+            res.status(404).send('Page Not Found');
+        } else {
+            res.send(html);
+        }
+    });
 });
 
 // sitemap.xml 라우터 추가
