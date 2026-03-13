@@ -84,6 +84,26 @@ app.use((req, res, next) => {
     next();
 });
 
+app.get('/blog/:post', (req, res, next) => {
+    const post = req.params.post;
+    
+    // URL과 실제 ejs 파일명이 다를 경우를 위한 매핑 (필요시 수정)
+    const viewMap = {
+        'notetaking': 'notetaking',
+        'comparison': 'tools-comparsion' // 실제 파일명이 tools-comparsion.ejs인 경우
+    };
+    
+    const viewName = viewMap[post] || post;
+
+    res.render(viewName, (err, html) => {
+        if (err) {
+            // 파일을 찾지 못한 경우(예: /blog/abc) 404 처리를 위해 다음 미들웨어로 넘김
+            return next();
+        }
+        res.send(html);
+    });
+});
+
 // 2. 확장자 없는 라우트 처리
 app.get('/:page', (req, res, next) => {
     const page = req.params.page;
