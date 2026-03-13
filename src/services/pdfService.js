@@ -208,7 +208,7 @@ class PdfService {
             await page.evaluate(async () => {
                 await new Promise((resolve) => {
                     let totalHeight = 0;
-                    const distance = 800;
+                    const distance = 100;
                     const timer = setInterval(() => {
                         const scrollHeight = document.body.scrollHeight;
                         window.scrollBy(0, distance);
@@ -264,7 +264,12 @@ class PdfService {
 
             // 콘텐츠 너비, HTML 및 필요한 리소스 추출
             const result = await page.evaluate((opts) => {
-                const { includeTitle, includeBanner, includeTags } = opts;
+                // const { includeTitle, includeBanner, includeTags } = opts;
+
+                const includeTitle = true;
+                const includeBanner = true;
+                const includeTags = true;
+            
                 
                 const contentEl = document.querySelector('.notion-page-content');
                 const width = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
@@ -300,12 +305,11 @@ class PdfService {
 
                 // (1) 배너 및 아이콘
                 if (includeBanner) {
-                    const cover = document.querySelector('.notion-page-cover-wrapper');
+                    const cover = document.querySelector('.layout-full');
                     pushElement(cover);
                     
-                    const icon = document.querySelector('.layout-content .notion-record-icon');
-                    if (icon) {
-                        const iconBlock = icon.closest('.notion-page-block') || icon;
+                    const iconBlock = document.querySelector('.layout-content:nth-child(1) > div > div > .pseudoSelection > div > div > div > div > div > img');
+                    if (iconBlock) {
                         pushElement(iconBlock);
                     }
                 }
@@ -880,7 +884,7 @@ class PdfService {
                 `;
 
                 if (!includeTitle) dynamicStyles += `h1, .notion-page-block:has(h1) { display: none !important; }`;
-                if (!includeBanner) dynamicStyles += `.notion-page-cover-wrapper, .notion-record-icon, .notion-page-controls { display: none !important; }`;
+                if (!includeBanner) dynamicStyles += `.layout-full .notion-page-cover-wrapper, .layout-content .notion-record-icon, .notion-page-controls { display: none !important; }`;
                 if (!includeTags) dynamicStyles += `[aria-label="페이지 속성"], [aria-label="Page properties"] { display: none !important; }`;
                 if (!includeDiscussion) dynamicStyles += `.layout-content-with-divider:has(.notion-page-view-discussion) { display: none !important;}`;
 

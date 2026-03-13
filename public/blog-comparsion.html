@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>노션 PDF 내보내기 한계와 해결책 | Single Notion</title>
+    <link rel="icon" href="/favicon.png" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.260313.css">
+</head>
+<body>
+    <div class="background-pattern"></div>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="logo">
+                <img src="/favicon.png" alt="Single Notion Logo" style="width: 30px; height: 30px; margin-right: -5px; vertical-align: middle;"> Single Notion
+            </a>
+            <div class="nav-links" style="display: flex; gap: 1.5rem; align-items: center;">
+                <a href="how-to-use.html" class="nav-link">사용 방법</a>
+                <a href="blog-comparsion.html" class="nav-link">Blog</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <section class="hero" style="padding-bottom: 40px;">
+            <div class="container fade-in-up">
+                <h1 class="title" style="font-size: clamp(2rem, 4vw, 3rem);">끊김 없는 몰입의 경험,<br><span class="highlight">단일 페이지 PDF</span></h1>
+                <p class="subtitle">노션의 무한한 캔버스를 PDF라는 정적인 틀에 가두지 마세요. 가독성을 결정짓는 기술적 차이를 분석합니다.</p>
+            </div>
+        </section>
+        
+        <section class="features" style="padding-top: 0;">
+            <div class="container fade-in-up" style="max-width: 900px; animation-delay: 0.2s;">
+                
+                <article class="feature-card" style="padding: 3.5rem 4rem; margin-bottom: 2rem;">
+                    <div class="icon-box" style="margin-bottom: 2rem; width: 64px; height: 64px; font-size: 1.6rem;">
+                        <i class="fa-solid fa-scissors"></i>
+                    </div>
+                    
+                    <div style="margin-bottom: 3.5rem;">
+                        <h2 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 1.5rem; color: var(--text-main); letter-spacing: -0.02em;">
+                            왜 노션의 기본 PDF로는 부족할까요?
+                        </h2>
+                        <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem; margin-bottom: 1.5rem;">
+                            노션은 웹 기반의 <strong>'무한 캔버스(Infinite Canvas)'</strong> 구조를 가지고 있습니다. 하지만 일반적인 PDF 변환 엔진은 이를 강제로 A4(210x297mm)라는 물리적 종이 규격에 맞춰 자릅니다. 이 과정에서 발생하는 '페이지 분할'은 단순한 여백의 문제가 아닙니다.
+                        </p>
+                        <div style="background: #f1f5f9; padding: 1.5rem; border-radius: 12px; border-left: 4px solid #ef4444;">
+                            <ul style="list-style: none; color: #475569; font-size: 0.95rem; line-height: 1.6;">
+                                <li style="margin-bottom: 0.5rem;"><i class="fa-solid fa-xmark" style="color: #ef4444; margin-right: 8px;"></i> <strong>데이터 단절:</strong> 표(Table)나 데이터베이스의 행이 반으로 잘려 정보 해석이 불가능해집니다.</li>
+                                <li style="margin-bottom: 0.5rem;"><i class="fa-solid fa-xmark" style="color: #ef4444; margin-right: 8px;"></i> <strong>디자인 훼손:</strong> 정성스럽게 배치한 콜아웃 블록의 아이콘과 텍스트가 서로 다른 페이지로 이산가족이 됩니다.</li>
+                                <li><i class="fa-solid fa-xmark" style="color: #ef4444; margin-right: 8px;"></i> <strong>이미지 절단:</strong> 포트폴리오의 핵심인 작업물 이미지가 중간에 뚝 끊겨 전문성을 떨어뜨립니다.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 3.5rem;">
+                        <h3 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 1.2rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--primary-color);"></i> SingleNotion의 접근 방식
+                        </h3>
+                        <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem;">
+                            SingleNotion은 <strong>'브라우저 뷰포트 동적 확장'</strong> 기술을 사용합니다. 문서를 출력용 엔진이 아닌 웹 렌더링 엔진으로 먼저 해석하며, 문서의 전체 길이를 픽셀 단위로 정확히 계산하여 하나의 연속된 비트맵/벡터 레이어로 결합합니다.
+                        </p>
+                        <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem; margin-top: 1rem;">
+                            결과적으로 변환된 PDF는 마치 웹사이트를 그대로 스크롤하는 듯한 <strong>'심리스(Seamless)'</strong>한 경험을 제공합니다. 이는 이력서나 포트폴리오를 검토하는 인사 담당자나 클라이언트에게 정보의 흐름을 끊김 없이 전달할 수 있음을 의미합니다.
+                        </p>
+                    </div>
+
+                    <div>
+                        <h3 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 1.2rem; color: var(--text-main); display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-display" style="color: var(--primary-color);"></i> 화면 중심 시대의 새로운 표준
+                        </h3>
+                        <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem; margin-bottom: 1.5rem;">
+                            오늘날 문서의 90% 이상은 종이가 아닌 모니터와 모바일 화면에서 소비됩니다. 물리적 종이 규격에 얽매인 페이지 분할은 오히려 화면 열람 시 불필요한 스크롤 저항과 시각적 단절을 초래합니다.
+                        </p>
+                    </div>
+                </article>
+                
+                <div style="text-align: center; margin-top: 4rem;">
+                    <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-weight: 500;">지금 당신의 노션 문서를 전문가의 수준으로 격상시키세요.</p>
+                    <a href="index.html" class="submit-btn" style="text-decoration: none; padding: 18px 40px; font-size: 1.2rem; display: inline-flex;">
+                        단일 페이지 PDF로 지금 변환 <i class="fa-solid fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <p class="copyright">&copy; 2026 Single Notion. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -117,6 +117,13 @@ class StandardEditApp {
                 }
             });
 
+            // const recordIcon = this.contentArea.querySelectorAll('#content-area > .notion-record-icon;');
+            // targetElements.forEach(el => {
+            //     el.style.display = 'none';
+            // });
+
+            
+
 
             
 
@@ -642,7 +649,7 @@ class StandardEditApp {
             styles += `#content-area h1, #content-area .notion-page-block:has(h1) { display: none !important; }\n`;
         }
         if (!document.getElementById('chk-banner').checked) {
-            styles += `#content-area .notion-page-cover-wrapper, #content-area .notion-record-icon, #content-area .notion-page-controls { display: none !important; }\n`;
+            styles += `#content-area .notion-page-cover-wrapper, #content-area .notion-page-controls { display: none !important; }\n`;
         }
         if (!document.getElementById('chk-tags').checked) {
             styles += `#content-area [aria-label="페이지 속성"], #content-area [aria-label="Page properties"], #content-area div[role="table"][aria-label="Page properties"] + div, #content-area div[role="table"][aria-label="페이지 속성"] + div { display: none !important; }\n`;
