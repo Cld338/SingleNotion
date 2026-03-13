@@ -87,17 +87,16 @@ app.use((req, res, next) => {
 app.get('/blog/:post', (req, res, next) => {
     const post = req.params.post;
     
-    // URL과 실제 ejs 파일명이 다를 경우를 위한 매핑 (필요시 수정)
     const viewMap = {
-        'notetaking': 'notetaking',
-        'comparison': 'tools-comparsion' // 실제 파일명이 tools-comparsion.ejs인 경우
+        'notetaking': 'blog/notetaking',
+        'tools-comparsion': 'blog/tools-comparsion' // 실제 파일명 반영
     };
     
-    const viewName = viewMap[post] || post;
+    const viewName = viewMap[post] || `blog/${post}`;
 
     res.render(viewName, (err, html) => {
         if (err) {
-            // 파일을 찾지 못한 경우(예: /blog/abc) 404 처리를 위해 다음 미들웨어로 넘김
+            // 파일을 찾지 못한 경우 404 처리를 위해 다음 미들웨어로 넘김
             return next();
         }
         res.send(html);
@@ -132,8 +131,8 @@ app.get('/sitemap.xml', (req, res) => {
         { url: '/', changefreq: 'weekly', priority: '1.0', lastmod: '2026-03-12' },
         { url: '/how-to-use', changefreq: 'monthly', priority: '0.7', lastmod: '2026-03-08'  },
         { url: '/blog', changefreq: 'weekly', priority: '0.9', lastmod: '2026-03-13' },
-        { url: '/blog-comparsion', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' },
-        { url: '/blog-notetaking', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-14' },
+        { url: '/blog/tools-comparsion', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' },
+        { url: '/blog/notetaking', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-14' },
         { url: '/faq', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' }
     ];
 
