@@ -84,6 +84,23 @@ app.use((req, res, next) => {
     next();
 });
 
+
+// 2. 확장자 없는 라우트 처리
+app.get('/:page', (req, res, next) => {
+    const page = req.params.page;
+    
+    // 정적 파일(이미지, CSS 등) 요청은 무시하고 다음 미들웨어로 넘김
+    if (page.includes('.')) return next();
+
+    res.render(page, (err, html) => {
+        if (err) {
+            next(); // 파일을 찾지 못한 경우 404로 이동
+        } else {
+            res.send(html);
+        }
+    });
+});
+
 app.get('/blog/:post', (req, res, next) => {
     const post = req.params.post;
     
@@ -100,22 +117,6 @@ app.get('/blog/:post', (req, res, next) => {
             return next();
         }
         res.send(html);
-    });
-});
-
-// 2. 확장자 없는 라우트 처리
-app.get('/:page', (req, res, next) => {
-    const page = req.params.page;
-    
-    // 정적 파일(이미지, CSS 등) 요청은 무시하고 다음 미들웨어로 넘김
-    if (page.includes('.')) return next();
-
-    res.render(page, (err, html) => {
-        if (err) {
-            next(); // 파일을 찾지 못한 경우 404로 이동
-        } else {
-            res.send(html);
-        }
     });
 });
 
