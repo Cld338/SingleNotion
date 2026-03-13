@@ -96,12 +96,12 @@ app.get('/sitemap.xml', (req, res) => {
 
     // 허용된 페이지 목록 (우선 메인 페이지 포함)
     const allowedPages = [
-        { url: '/', changefreq: 'weekly', priority: '1.0'},
-        { url: '/how-to-use.html', changefreq: 'monthly', priority: '0.7' },
-        { url: '/blog.html', changefreq: 'weekly', priority: '0.9'}, // 신규 추가된 블로그 목록 페이지
-        { url: '/blog-comparsion.html', changefreq: 'weekly', priority: '0.8'}, // 이 줄을 추가합니다.
-        { url: '/blog-notetaking.html', changefreq: 'weekly', priority: '0.8'}, // 신규 페이지 추가
-        { url: '/faq.html', changefreq: 'weekly', priority: '0.8'}
+        { url: '/', changefreq: 'weekly', priority: '1.0', lastmod: '2026-03-12' },
+        { url: '/how-to-use.html', changefreq: 'monthly', priority: '0.7', lastmod: '2026-03-08'  },
+        { url: '/blog.html', changefreq: 'weekly', priority: '0.9', lastmod: '2026-03-13' }, // 신규 추가된 블로그 목록 페이지
+        { url: '/blog-comparsion.html', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' }, // 이 줄을 추가합니다.
+        { url: '/blog-notetaking.html', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-14' }, // 신규 페이지 추가
+        { url: '/faq.html', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' }
         // 추가 페이지 예시: { url: '/docs', changefreq: 'weekly', priority: '0.8' }
     ];
 
