@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
+Disallow: /admin/
+Disallow: /proxy-asset
 
 Sitemap: https://notion-pdf.cld338.me/sitemap.xml

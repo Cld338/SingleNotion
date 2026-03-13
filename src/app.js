@@ -76,12 +76,24 @@ app.get('/', (req, res) => {
     res.render('index');
 });
 
-// .html 확장자 요청을 처리하여 해당 이름의 .ejs 파일을 렌더링
-app.get('/:page.html', (req, res) => {
+app.use((req, res, next) => {
+    if (req.path.endsWith('.html') && req.path !== '/index.html') {
+        const newPath = req.path.slice(0, -5);
+        return res.redirect(301, newPath + (req.url.slice(req.path.length)));
+    }
+    next();
+});
+
+// 2. 확장자 없는 라우트 처리
+app.get('/:page', (req, res, next) => {
     const page = req.params.page;
+    
+    // 정적 파일(이미지, CSS 등) 요청은 무시하고 다음 미들웨어로 넘김
+    if (page.includes('.')) return next();
+
     res.render(page, (err, html) => {
         if (err) {
-            res.status(404).send('Page Not Found');
+            next(); // 파일을 찾지 못한 경우 404로 이동
         } else {
             res.send(html);
         }
@@ -95,14 +107,14 @@ app.get('/sitemap.xml', (req, res) => {
     const baseUrl = `${protocol}://${host}`;
 
     // 허용된 페이지 목록 (우선 메인 페이지 포함)
+    // sitemap.xml 라우터 내부의 allowedPages 수정
     const allowedPages = [
         { url: '/', changefreq: 'weekly', priority: '1.0', lastmod: '2026-03-12' },
-        { url: '/how-to-use.html', changefreq: 'monthly', priority: '0.7', lastmod: '2026-03-08'  },
-        { url: '/blog.html', changefreq: 'weekly', priority: '0.9', lastmod: '2026-03-13' }, // 신규 추가된 블로그 목록 페이지
-        { url: '/blog-comparsion.html', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' }, // 이 줄을 추가합니다.
-        { url: '/blog-notetaking.html', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-14' }, // 신규 페이지 추가
-        { url: '/faq.html', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' }
-        // 추가 페이지 예시: { url: '/docs', changefreq: 'weekly', priority: '0.8' }
+        { url: '/how-to-use', changefreq: 'monthly', priority: '0.7', lastmod: '2026-03-08'  },
+        { url: '/blog', changefreq: 'weekly', priority: '0.9', lastmod: '2026-03-13' },
+        { url: '/blog-comparsion', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' },
+        { url: '/blog-notetaking', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-14' },
+        { url: '/faq', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' }
     ];
 
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
