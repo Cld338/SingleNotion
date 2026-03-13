@@ -92,6 +92,8 @@ body {
     background: transparent;
     box-shadow: none;
     width: 800px;
+    flex-shrink: 0; /* 추가: flex 컨테이너 안에서 원본 너비 찌그러짐 방지 */
+    
     position: relative;
     box-sizing: border-box;
     user-select: none !important;
@@ -103,6 +105,13 @@ body {
     color: #333333;
     display: block;
     height: max-content;
+    
+}
+
+#content-area .notion-table-content,
+#content-area .notion-code-block {
+    max-width: 100% !important;
+    /* overflow-x: auto !important; */
 }
 
 /* =========================================================

@@ -103,7 +103,8 @@ class StandardEditApp {
             // 4. HTML 주입
             Logger.log('INIT Injecting HTML...', 'info');
             this.contentArea.innerHTML = html;
-
+            
+            // 테이블이 화면을 벗어나는 문제
             const targetElements = this.contentArea.querySelectorAll('.notion-table-content');
             targetElements.forEach(el => {
                 el.style.paddingLeft = '0px';
@@ -115,6 +116,11 @@ class StandardEditApp {
                     ancestor.style.width = '';
                 }
             });
+
+
+            
+
+
             
 
 
@@ -171,6 +177,12 @@ class StandardEditApp {
             this.contentArea.style.transform = `scale(${this.viewerScale})`;
             this.contentArea.style.transformOrigin = 'top center';
             this.contentArea.style.width = `${this.contentWidthPx}px`;
+            
+            // [수정된 부분] 좌우 여백의 차이를 계산하여 종이의 시각적 정중앙을 화면 중앙에 맞춤
+            const margins = this.getMargins();
+            const offsetPx = (margins.left - margins.right) / 2;
+            this.contentArea.style.marginLeft = `${offsetPx}px`;
+
             Logger.success(`Scale applied: ${this.viewerScale.toFixed(2)}, Width: ${this.contentWidthPx}px`);
         }
     }

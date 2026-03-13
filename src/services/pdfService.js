@@ -200,12 +200,26 @@ class PdfService {
             page.setDefaultNavigationTimeout(120000);
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
             await page.setViewport({ width: 3000, height: 1000 });
-            await page.goto(url, { waitUntil: 'networkidle0' });
+            await page.goto(url, { waitUntil: 'networkidle2' });
 
             // CSS와 JS 로딩이 완료될 때까지 대기
             logger.info('Waiting for CSS and JS to load completely...');
             
             await page.evaluate(async () => {
+                await new Promise((resolve) => {
+                    let totalHeight = 0;
+                    const distance = 800;
+                    const timer = setInterval(() => {
+                        const scrollHeight = document.body.scrollHeight;
+                        window.scrollBy(0, distance);
+                        totalHeight += distance;
+                        if (totalHeight >= scrollHeight + 1000) {
+                            clearInterval(timer);
+                            window.scrollTo(0, 0);
+                            resolve();
+                        }
+                    }, 50);
+                });
                 // 1. 모든 스타일시트 로드 완료 확인
                 const stylesheets = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
                 const styleloadPromises = stylesheets.map(link => {
@@ -289,7 +303,7 @@ class PdfService {
                     const cover = document.querySelector('.notion-page-cover-wrapper');
                     pushElement(cover);
                     
-                    const icon = document.querySelector('.notion-record-icon');
+                    const icon = document.querySelector('.layout-content .notion-record-icon');
                     if (icon) {
                         const iconBlock = icon.closest('.notion-page-block') || icon;
                         pushElement(iconBlock);
