@@ -6,7 +6,7 @@
     
     <title>노션 PDF 내보내기 페이지 끊김 문제와 해결 방법 | Single Notion</title>
     <meta name="description" content="노션의 무한 캔버스 구조로 인해 발생하는 PDF 내보내기 페이지 끊김 현상의 기술적 원인과 Single Notion의 심리스한 단일 페이지 변환 기술을 소개합니다.">
-    <meta name="keywords" content="노션 PDF 변환, 노션 PDF 내보내기, 노션 페이지 끊김, Single Notion, 노션 포트폴리오 PDF, 노션 이력서 PDF">
+    <meta name="keywords" content="노션 PDF 변환, 노션 PDF 내보내기, 노션 페이지 끊김, Single Notion, 노션 포트폴리오 PDF, 노션 이력서 PDF, Ladders 이력서 통계, UX 가독성">
     <meta name="author" content="Single Notion">
     
     <link rel="canonical" href="https://notion-pdf.cld338.me/tools-comparison">
@@ -23,31 +23,36 @@
     <meta name="twitter:description" content="웹 렌더링 엔진 기반의 끊김 없는 노션 PDF 변환 경험을 제공합니다.">
     <meta name="twitter:image" content="https://notion-pdf.cld338.me/images/images/og-image-new.png">
 
+
+
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "BlogPosting",
-      "headline": "노션 PDF 내보내기 한계와 해결책: 단일 페이지 PDF의 가치",
-      "description": "노션의 캔버스 구조를 단일 페이지 PDF로 변환하는 기술적 차이 분석",
-      "image": "https://notion-pdf.cld338.me/images/og-image-new.png",
-      "author": {
-        "@type": "Organization",
-        "name": "Single Notion"
-      },
-      "publisher": {
-        "@type": "Organization",
-        "name": "Single Notion",
-        "logo": {
-          "@type": "ImageObject",
-          "url": "https://notion-pdf.cld338.me/images/favicon.ico"
+        {
+            "@context": "https://schema.org",
+            "@type": "BlogPosting",
+            "headline": "노션 PDF 내보내기 한계와 해결책: 단일 페이지 PDF의 가치",
+            "description": "노션의 캔버스 구조를 단일 페이지 PDF로 변환하는 기술적 차이 분석",
+            "image": "https://notion-pdf.cld338.me/images/og-image-new.png",
+            "author": {
+                    "@type": "Person",
+                    "name": "Frontend Engineer, Single Notion",
+                    "url": "https://github.com/Cld338", 
+                    "jobTitle": "Lead Developer"
+            },
+            "publisher": {
+                "@type": "Organization",
+                "name": "Single Notion",
+                "logo": {
+                "@type": "ImageObject",
+                "url": "https://notion-pdf.cld338.me/images/favicon.ico"
+                }
+            },
+            "mainEntityOfPage": {
+                "@type": "WebPage",
+                "@id": "https://notion-pdf.cld338.me/tools-comparison"
+            }
         }
-      },
-      "mainEntityOfPage": {
-        "@type": "WebPage",
-        "@id": "https://notion-pdf.cld338.me/tools-comparison"
-      },
-    }
     </script>
+
 
     <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -83,9 +88,53 @@
                         <h2 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 1.5rem; color: var(--text-main); letter-spacing: -0.02em;">
                             왜 노션의 기본 PDF로는 부족할까요?
                         </h2>
+                        
+                        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid #e2e8f0;">
+                            <p style="color: var(--text-muted); line-height: 1.7; font-size: 1rem; margin-bottom: 1rem;">
+                                전 세계 1억 명 이상의 사용자와 Fortune 500 기업의 50%가 채택한 노션은 정보 구성에 최적화되어 있습니다. 하지만 이를 기존 PDF로 내보낼 때 치명적인 가독성 저하가 발생합니다.
+                            </p>
+                            <p style="color: var(--text-muted); line-height: 1.7; font-size: 1rem; margin-bottom: 1rem;">
+                                <strong>💡 Ladders 연구 결과 (2018):</strong> 채용 담당자가 이력서 및 포트폴리오를 스캔하는 데 걸리는 시간은 평균 <strong>7.4초</strong>에 불과합니다. 레이아웃이 깨진 문서는 이 짧은 시간 내에 즉각적인 이탈을 유발합니다.                             </p>
+                            <blockquote style="border-left: 4px solid var(--primary-color); padding-left: 1rem; margin: 1rem 0; color: #475569; font-style: italic;">
+                                "정보의 맥락을 잃지 않으려면 강제적인 페이지 분할(Pagination)보다 연속적인 스크롤(Continuous Scrolling)이 인지 부하를 줄이는 데 훨씬 유리합니다." <br>
+                                <span style="font-size: 0.9em; font-weight: 600;">— Nielsen Norman Group (UX 연구 기관)</span>
+                            </blockquote>
+                        </div>
+
                         <p style="color: var(--text-muted); line-height: 1.8; font-size: 1.1rem; margin-bottom: 1.5rem;">
                             노션은 웹 기반의 <strong>'무한 캔버스(Infinite Canvas)'</strong> 구조를 가지고 있습니다. 하지만 일반적인 PDF 변환 엔진은 이를 강제로 A4라는 물리적 종이 규격에 맞춰 자릅니다. 이 과정에서 발생하는 '페이지 분할'은 단순한 여백의 문제가 아닙니다.
                         </p>
+                        <div style="margin-bottom: 3.5rem; overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                                <caption style="text-align: left; font-weight: bold; margin-bottom: 1rem; font-size: 1.2rem;">기본 노션 PDF 내보내기 vs Single Notion 비교</caption>
+                                <thead>
+                                    <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+                                        <th style="padding: 1rem;">비교 항목</th>
+                                        <th style="padding: 1rem;">기본 노션 PDF 내보내기</th>
+                                        <th style="padding: 1rem; color: var(--primary-color);">Single Notion</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 1rem; font-weight: 600;">페이지 분할</td>
+                                        <td style="padding: 1rem;">강제 A4 규격 절단 (표/이미지 잘림 발생)</td>
+                                        <td style="padding: 1rem;">브라우저 뷰포트 동적 확장을 통한 심리스(Seamless) 단일 페이지</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 1rem; font-weight: 600;">다단 레이아웃</td>
+                                        <td style="padding: 1rem;">단일 단으로 붕괴될 위험 높음</td>
+                                        <td style="padding: 1rem;">원형 레이아웃 100% 보존</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 1rem; font-weight: 600;">여백 제어</td>
+                                        <td style="padding: 1rem;">불가능</td>
+                                        <td style="padding: 1rem;">상하좌우 픽셀(px) 단위 정밀 제어 가능</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+
                         <div style="background: #f1f5f9; padding: 1.5rem; border-radius: 12px; border-left: 4px solid #ef4444;">
                             <ul style="list-style: none; color: #475569; font-size: 0.95rem; line-height: 1.6;">
                                 <li style="margin-bottom: 0.5rem;"><i class="fa-solid fa-xmark" style="color: #ef4444; margin-right: 8px;"></i> <strong>데이터 단절:</strong> 표(Table)나 데이터베이스의 행이 반으로 잘려 정보 해석이 불가능해집니다.</li>
@@ -105,7 +154,7 @@
 
                         <div class="video-container" style="margin: 2.5rem 0; text-align: center;">
                             <div style="background: #000; border-radius: 16px; aspect-ratio: 16/9; width: 100%; max-width: 800px; margin: 0 auto; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); border: 1px solid #334155;">
-                                <video width="100%" height="100%" controls title="SingleNotion을 이용한 노션 PDF 변환 과정 시연" poster="/api/placeholder/800/450">
+                                <video width="100%" height="100%" controls aria-label="Single Notion의 브라우저 뷰포트 동적 확장 기술을 활용하여 노션 페이지를 단일 페이지 PDF로 변환하는 시연 영상" title="SingleNotion을 이용한 노션 PDF 변환 과정 시연" poster="/api/placeholder/800/450">
                                     <source src="https://notion-pdf.cld338.me/video/sample.mp4" type="video/mp4">
                                     브라우저가 비디오 태그를 지원하지 않습니다.
                                 </video>
@@ -123,8 +172,11 @@
                             <i class="fa-solid fa-microscope" style="color: var(--primary-color); margin-right: 8px;"></i> 개발자 노트: 왜 픽셀 단위 계산이 중요한가?
                         </h4>
                         <p style="color: #64748b; line-height: 1.7; font-size: 1rem; margin-bottom: 1.2rem;">
-                            기본적인 PDF 내보내기는 웹의 유연한 레이아웃을 '종이'라는 고정된 규격에 맞추기 위해 강제로 DOM 요소를 절단합니다. SingleNotion은 이를 방지하기 위해 가상의 <strong>헤드리스 브라우저(Headless Browser)</strong> 상에서 전체 페이지의 렌더링 높이를 동적으로 측정합니다.
+                            기본적인 PDF 내보내기는 웹의 유연한 레이아웃을 '종이'라는 고정된 규격에 맞추기 위해 강제로 
+                            <a href="https://developer.mozilla.org/ko/docs/Web/API/Document_Object_Model/Introduction" target="_blank" rel="noopener noreferrer" style="color: var(--primary-color); text-decoration: underline;">DOM(문서 객체 모델)</a> 요소를 절단합니다. SingleNotion은 이를 방지하기 위해 가상의 
+                            <a href="https://developer.chrome.com/docs/puppeteer/" target="_blank" rel="noopener noreferrer" style="color: var(--primary-color); text-decoration: underline;">헤드리스 브라우저(Headless Browser)</a> 상에서 전체 페이지의 렌더링 높이를 동적으로 측정합니다.
                         </p>
+                        
                         <ul style="list-style: none; padding: 0; color: #64748b; font-size: 0.95rem;">
                             <li style="margin-bottom: 0.6rem; display: flex; align-items: flex-start; gap: 10px;">
                                 <i class="fa-solid fa-check" style="color: #10b981; margin-top: 4px;"></i>

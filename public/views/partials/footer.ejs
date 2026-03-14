@@ -1,7 +1,37 @@
-<footer class="footer">
-    <div class="container">
-        <div class="footer-content">
-            <p class="copyright">&copy; 2026 Single Notion. All rights reserved.</p>
+<footer class="site-footer" style="background-color: #f8fafc; padding: 3rem 2rem; border-top: 1px solid #e2e8f0; margin-top: 4rem;">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2rem;">
+        
+        <div class="footer-brand" style="flex: 1; min-width: 250px;">
+            <h3 style="font-size: 1.2rem; font-weight: 700; color: #334155; margin-bottom: 1rem;">Single Notion</h3>
+            <p style="color: #64748b; font-size: 0.95rem; line-height: 1.6; margin-bottom: 1rem; max-width: 400px;">
+                노션 문서를 그대로, 잘림 없는 단일 페이지 PDF로 변환하는 PDF 렌더링 서비스입니다.
+            </p>
+            <address style="font-style: normal; color: #64748b; font-size: 0.9rem;">
+                <strong>운영 및 고객지원:</strong> <a href="mailto:jihuno291@gmail.com" style="color: var(--primary-color); text-decoration: none;">jihuno291@gmail.com</a>
+            </address>
         </div>
+
+        <div class="footer-links" style="flex: 1; min-width: 250px; display: flex; gap: 3rem;">
+            <div style="flex: 1;">
+                <h4 style="font-size: 1.05rem; font-weight: 700; color: #334155; margin-bottom: 1rem;">Service</h4>
+                <ul style="list-style: none; padding: 0; margin: 0; line-height: 2;">
+                    <li><a href="/how-to-use" style="color: #64748b; text-decoration: none; font-size: 0.95rem; transition: color 0.2s;" onmouseover="this.style.color='#0f172a'" onmouseout="this.style.color='#64748b'">사용 방법</a></li>
+                    <li><a href="/faq" style="color: #64748b; text-decoration: none; font-size: 0.95rem; transition: color 0.2s;" onmouseover="this.style.color='#0f172a'" onmouseout="this.style.color='#64748b'">자주 묻는 질문(FAQ)</a></li>
+                    <li><a href="/blog" style="color: #64748b; text-decoration: none; font-size: 0.95rem; transition: color 0.2s;" onmouseover="this.style.color='#0f172a'" onmouseout="this.style.color='#64748b'">블로그</a></li>
+                </ul>
+            </div>
+            
+            <div style="flex: 1;">
+                <h4 style="font-size: 1.05rem; font-weight: 700; color: #334155; margin-bottom: 1rem;">Legal</h4>
+                <ul style="list-style: none; padding: 0; margin: 0; line-height: 2;">
+                    <li><a href="/terms-of-service.txt" target="_blank" rel="noopener noreferrer" style="color: #64748b; text-decoration: none; font-size: 0.95rem; transition: color 0.2s;" onmouseover="this.style.color='#0f172a'" onmouseout="this.style.color='#64748b'">이용약관</a></li>
+                    <li><a href="/privacy-policy.txt" target="_blank" rel="noopener noreferrer" style="color: #64748b; text-decoration: none; font-size: 0.95rem; font-weight: 600; transition: color 0.2s;" onmouseover="this.style.color='#0f172a'" onmouseout="this.style.color='#64748b'">개인정보처리방침</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-bottom" style="max-width: 1200px; margin: 2rem auto 0; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 0.85rem;">
+        &copy; <%= new Date().getFullYear() %> Single Notion. All rights reserved.
     </div>
 </footer>

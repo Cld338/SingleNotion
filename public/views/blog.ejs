@@ -4,6 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blog | Single Notion</title>
+
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "Blog",
+            "name": "Single Notion Blog",
+            "description": "서비스 업데이트 소식과 노션 PDF 변환 관련 기술 이야기",
+            "url": "https://notion-pdf.cld338.me/blog",
+            "blogPost": [
+                {
+                "@type": "BlogPosting",
+                "headline": "노션 PDF 내보내기 페이지 끊김 문제와 해결 방법",
+                "url": "https://notion-pdf.cld338.me/blog/tools-comparison"
+                },
+                {
+                "@type": "BlogPosting",
+                "headline": "노션 문서 위에 필기하는 법: 잘림 없는 PDF 불러오기",
+                "url": "https://notion-pdf.cld338.me/blog/notetaking"
+                }
+            ]
+        }
+    </script>
     <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -26,7 +48,12 @@
         
         <section class="features" style="padding-top: 0;">
             <div class="container fade-in-up" style="max-width: 900px; animation-delay: 0.2s;">
-                
+                <article class="feature-card" style="padding: 2.5rem; margin-bottom: 2rem; cursor: pointer; transition: transform 0.2s;" onclick="location.href='/blog/visual-regression-test'" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
+                    <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem; color: var(--text-main);">시각적 회귀 테스트(Visual Regression Test) 아키텍처 및 구현 전략</h2>
+                    <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">시각적 회귀 테스트(VRT)의 원리부터 PDF 렌더링 검증, CI/CD 파이프라인 통합 및 Flakiness 완화 전략까지 다룹니다.</p>
+                    <span style="color: var(--primary-color); font-weight: 600; font-size: 0.95rem;">글 읽기 <i class="fa-solid fa-arrow-right" style="margin-left: 5px;"></i></span>
+                </article>
+
                 <article class="feature-card" style="padding: 2.5rem; margin-bottom: 2rem; cursor: pointer; transition: transform 0.2s;" onclick="location.href='/blog/tools-comparison'" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
                     <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem; color: var(--text-main);">노션 PDF 내보내기 페이지 끊김 문제와 해결 방법</h2>
                     <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">노션의 무한 캔버스 구조로 인해 발생하는 PDF 내보내기 페이지 끊김 현상의 기술적 원인과 Single Notion의 심리스한 단일 페이지 변환 기술을 소개합니다.</p>
@@ -38,6 +65,8 @@
                     <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 1.5rem;">노션 페이지를 한 장의 긴 PDF로 변환하여 필기 앱에서 끊김 없이 사용하는 워크플로우를 소개합니다.</p>
                     <span style="color: var(--primary-color); font-weight: 600; font-size: 0.95rem;">글 읽기 <i class="fa-solid fa-arrow-right" style="margin-left: 5px;"></i></span>
                 </article>
+
+                
 
             </div>
         </section>

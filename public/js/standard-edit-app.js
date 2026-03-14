@@ -7,7 +7,7 @@ class StandardEditApp {
         // URL Parameters
         const params = new URLSearchParams(window.location.search);
         this.notionUrl = params.get('url');
-        this.format = params.get('format') || 'A4';
+        this.format = params.get('format') || 'SINGLE';
         this.mode = params.get('mode') || 'standard';
         
         // 추가: 제목, 배너, 속성 포함 여부 옵션

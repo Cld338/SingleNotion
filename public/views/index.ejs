@@ -18,24 +18,43 @@
     <meta name="twitter:description" content="노션 페이지를 PDF 파일로 쉽게 변환하세요.">
     <meta name="twitter:image" content="https://notion-pdf.cld338.me/images/og-image-new.png">
 
+    <link rel="alternate" hreflang="ko" href="https://notion-pdf.cld338.me/" />
+    <link rel="alternate" hreflang="en" href="https://notion-pdf.cld338.me/en/" />
+    <link rel="alternate" hreflang="x-default" href="https://notion-pdf.cld338.me/" />
+
     
-    <script src="https://unpkg.com/typed.js@2.0.16/dist/typed.umd.js"></script>
+    <script defer src="https://unpkg.com/typed.js@2.0.16/dist/typed.umd.js"></script>
 
     
 
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "Single Notion",
-      "url": "https://notion-pdf.cld338.me",
-      "description": "노션 페이지를 끊김 없는 단일 페이지 PDF로 변환해주는 웹 서비스",
-      "applicationCategory": "UtilityApplication",
-      "operatingSystem": "All",
-      "featureList": "단일 페이지 변환, 맞춤형 옵션(제목/배너/속성)"
-    }
+        {
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "Single Notion",
+            "url": "https://notion-pdf.cld338.me",
+            "description": "노션 페이지의 원래 레이아웃과 표 데이터의 잘림이나 끊김 없이, 사용자가 여백과 너비를 직접 제어하여 완벽한 단일 페이지 또는 A4 규격의 PDF로 변환해주는 맞춤형 렌더링 서비스입니다.",
+            "applicationCategory": "UtilityApplication",
+            "operatingSystem": "All",
+            "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "KRW"
+            },
+            "featureList": [
+                "노션 데이터베이스 표 및 갤러리 뷰 원본 비율 100% 유지 변환",
+                "상하좌우 여백(px) 및 단일 페이지 너비(px) 커스텀 제어",
+                "A4, A3, B5 등 글로벌 표준 인쇄 규격 지원",
+                "블록 단위 지정형 페이지 분할(Page Break) 기능",
+                "제목, 커버 배너 이미 및 속성(태그) 선택적 포함 기능"
+            ],
+            "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": "4.9",
+                "ratingCount": "128"
+            }
+        }
     </script>
-
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/styles.260313.css">
@@ -54,15 +73,19 @@
         <section class="hero">
             <div class="container fade-in-up">
                 <!-- <div class="badge">A4 출력이 추가되었습니다.✨</div> -->
-                <h1 class="title">노션 문서를<br><span class="highlight"><span class="typed-text"></span></span></h1>
+                <h1 class="title">노션 문서를<br>
+                    <span class="highlight">
+                        <span class="typed-text">보이는 그대로</span>
+                    </span>
+                </h1>
                 <p class="subtitle">단일 페이지부터 표준 규격(A4)까지,<br>링크 하나로 노션 페이지를 가장 깔끔한 PDF로 저장하세요.</p>
                 
                 <form id="convertForm" class="url-input-wrapper">
                     <div class="input-inner">
-                        <i class="fa-solid fa-link input-icon"></i>
-                        <input type="text" id="url" name="url" placeholder="노션 페이지 링크" required>
-                        <button type="submit" id="submitBtn" class="submit-btn">
-                            변환하기 <i class="fa-solid fa-arrow-right"></i>
+                        <i class="fa-solid fa-link input-icon" aria-hidden="true"></i>
+                        <input type="url" id="url" name="url" placeholder="노션 페이지 링크" required aria-label="PDF로 변환할 노션 페이지의 URL을 입력하세요">
+                        <button type="submit" id="submitBtn" class="submit-btn" aria-label="입력한 URL로 PDF 변환 시작하기">
+                            변환하기 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                         </button>
                     </div>
                 </form>

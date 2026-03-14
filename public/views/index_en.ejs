@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>Single Notion | Export Notion to PDF perfectly</title>
+    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
+    <meta name="description" content="Convert Notion pages to PDF without page breaks or broken layouts. We offer custom options like title, banner, and property selection.">
+    <meta name="keywords" content="Notion, PDF conversion, Export Notion PDF, Single Notion, Notion single page">
+    <link rel="canonical" href="https://notion-pdf.cld338.me"> 
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Single Notion - Export Notion to PDF perfectly">
+    <meta property="og:description" content="The easiest way to save Notion pages as PDF exactly as they look">
+    <meta property="og:image" content="https://notion-pdf.cld338.me/images/og-image-new.png"> 
+    <meta property="og:url" content="https://notion-pdf.cld338.me">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Single Notion">
+    <meta name="twitter:description" content="Easily convert your Notion pages to PDF files.">
+    <meta name="twitter:image" content="https://notion-pdf.cld338.me/images/og-image-new.png">
+
+    <link rel="alternate" hreflang="ko" href="https://notion-pdf.cld338.me/" />
+    <link rel="alternate" hreflang="en" href="https://notion-pdf.cld338.me/en/" />
+    <link rel="alternate" hreflang="x-default" href="https://notion-pdf.cld338.me/" />
+
+    <script src="https://unpkg.com/typed.js@2.0.16/dist/typed.umd.js"></script>
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Single Notion",
+        "url": "https://notion-pdf.cld338.me",
+        "description": "Web service that converts Notion pages into seamless single-page PDFs",
+        "applicationCategory": "UtilityApplication",
+        "operatingSystem": "All",
+        "featureList": "Single page conversion, Custom options(Title/Banner/Properties)",
+        "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.9",
+            "ratingCount": "128"
+        }
+    }
+    </script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../css/styles.260313.css">
+    <meta name="google-site-verification" content="4xXtEZual4VKfcnvtGUPBjMf0bJtj9OTbmUYVQLnDXI" />
+    
+   <%- include('partials/analytics-head') %>
+</head>
+<body>
+    <%- include('partials/analytics-body') %>
+    
+    <%- include('partials/navbar') %>
+
+    <main class="main-content">
+        <section class="hero">
+            <div class="container fade-in-up">
+                <h1 class="title">Your Notion Doc<br><span class="highlight"><span class="typed-text"></span></span></h1>
+                <p class="subtitle">From a seamless single page to standard A4 format,<br>save your Notion page as the cleanest PDF with just one link.</p>
+                
+                <form id="convertForm" class="url-input-wrapper">
+                    <div class="input-inner">
+                        <i class="fa-solid fa-link input-icon"></i>
+                        <input type="text" id="url" name="url" placeholder="Notion Page URL" required>
+                        <button type="submit" id="submitBtn" class="submit-btn">
+                            Convert <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </form>
+                <p class="helper-text"><i class="fa-solid fa-circle-info"></i> Make sure the page is set to <strong>Publish to web</strong> or <strong>Anyone with the link</strong> in the top-right 'Share' menu.</p>
+            </div>
+        </section>
+
+        <section id="how-it-works" class="features">
+            <div class="container">
+                <div class="feature-grid">
+                    <div class="feature-card fade-in-up" style="animation-delay: 0.1s;">
+                        <div class="step-number">01</div>
+                        <div class="icon-box"><i class="fa-solid fa-share-nodes"></i></div>
+                        <h2>Share Settings</h2>
+                        <p>Enable 'Publish to web' or share permissions<br>in the top-right menu of Notion.</p>
+                    </div>
+                    <div class="feature-card fade-in-up" style="animation-delay: 0.2s;">
+                        <div class="step-number">02</div>
+                        <div class="icon-box"><i class="fa-solid fa-paste"></i></div>
+                        <h2>Paste URL</h2>
+                        <p>Paste the copied Notion page link<br>into the input field.</p>
+                    </div>
+                    <div class="feature-card fade-in-up" style="animation-delay: 0.3s;">
+                        <div class="step-number">03</div>
+                        <div class="icon-box"><i class="fa-solid fa-sliders"></i></div>
+                        <h2>Customize & Save</h2>
+                        <p>Choose single page or standard format<br>and download as PDF.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <%- include('partials/footer') %>
+
+    <script>
+        var typed = new Typed('.typed-text', {
+            strings: ['Exactly as it looks', 'Most Notion-like', 'Convert to PDF'],
+            typeSpeed: 60,
+            backSpeed: 30,
+            loop: false,
+            backDelay: 2000
+        });
+
+        document.getElementById('convertForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            let rawUrl = formData.get('url').trim();
+
+            try {
+                const urlObj = new URL(rawUrl);
+                rawUrl = `${urlObj.origin}${urlObj.pathname}`;
+            } catch (e) {
+                alert('Invalid URL format.');
+                return;
+            }
+
+            const params = new URLSearchParams({
+                url: rawUrl
+            });
+
+            window.location.href = `standard-edit?${params.toString()}`;
+        });
+    </script>
+</body>
+</html>

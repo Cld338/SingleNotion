@@ -76,6 +76,11 @@ app.get('/', (req, res) => {
     res.render('index');
 });
 
+// 영문 메인 페이지
+app.get('/en', (req, res) => {
+    res.render('index_en');
+});
+
 app.use((req, res, next) => {
     if (req.path.endsWith('.html') && req.path !== '/index.html') {
         const newPath = req.path.slice(0, -5);
@@ -104,14 +109,10 @@ app.get('/:page', (req, res, next) => {
 app.get('/blog/:post', (req, res, next) => {
     const post = req.params.post;
     
-    // 기존 오타 URL로 접근 시 올바른 URL로 301 영구 이동
-    if (post === 'tools-comparison') {
-        return res.redirect(301, '/blog/tools-comparison');
-    }
-    
     const viewMap = {
         'notetaking': 'blog/notetaking',
-        'tools-comparison': 'blog/tools-comparison' 
+        'tools-comparison': 'blog/tools-comparison',
+        'visual-regression-test': 'blog/visual-regression-test'
     };
     
     const viewName = viewMap[post] || `blog/${post}`;
@@ -144,10 +145,12 @@ app.get('/sitemap.xml', (req, res) => {
 
     const allowedPages = [
         { url: '/', changefreq: 'weekly', priority: '1.0', lastmod: getLastMod('index.ejs') },
+        { url: '/en', changefreq: 'weekly', priority: '1.0', lastmod: getLastMod('index.ejs') },
         { url: '/how-to-use', changefreq: 'monthly', priority: '0.7', lastmod: getLastMod('how-to-use.ejs') },
         { url: '/blog', changefreq: 'weekly', priority: '0.9', lastmod: getLastMod('blog.ejs') },
         { url: '/blog/tools-comparison', changefreq: 'weekly', priority: '0.8', lastmod: getLastMod('blog/tools-comparison.ejs') },
         { url: '/blog/notetaking', changefreq: 'weekly', priority: '0.8', lastmod: getLastMod('blog/notetaking.ejs') },
+        { url: '/blog/visual-regression-test', changefreq: 'weekly', priority: '0.8', lastmod: getLastMod('blog/visual-regression-test.ejs') },
         { url: '/faq', changefreq: 'weekly', priority: '0.8', lastmod: getLastMod('faq.ejs') }
     ];
 
