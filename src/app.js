@@ -104,37 +104,51 @@ app.get('/:page', (req, res, next) => {
 app.get('/blog/:post', (req, res, next) => {
     const post = req.params.post;
     
+    // 기존 오타 URL로 접근 시 올바른 URL로 301 영구 이동
+    if (post === 'tools-comparison') {
+        return res.redirect(301, '/blog/tools-comparison');
+    }
+    
     const viewMap = {
         'notetaking': 'blog/notetaking',
-        'tools-comparsion': 'blog/tools-comparsion' // 실제 파일명 반영
+        'tools-comparison': 'blog/tools-comparison' 
     };
     
     const viewName = viewMap[post] || `blog/${post}`;
 
     res.render(viewName, (err, html) => {
         if (err) {
-            // 파일을 찾지 못한 경우 404 처리를 위해 다음 미들웨어로 넘김
             return next();
         }
         res.send(html);
     });
 });
 
-// sitemap.xml 라우터 추가
+// sitemap.xml 라우터 추가 (파일 수정일 동적 반영)
 app.get('/sitemap.xml', (req, res) => {
     const host = req.get('host');
     const protocol = req.protocol;
     const baseUrl = `${protocol}://${host}`;
 
-    // 허용된 페이지 목록 (우선 메인 페이지 포함)
-    // sitemap.xml 라우터 내부의 allowedPages 수정
+    // 파일의 마지막 수정 시간(mtime)을 가져오는 유틸리티 함수
+    const getLastMod = (fileName) => {
+        try {
+            const filePath = path.join(__dirname, '../public/views', fileName);
+            const stats = fs.statSync(filePath);
+            return stats.mtime.toISOString().split('T')[0];
+        } catch (err) {
+            // 파일을 찾지 못할 경우 기본값으로 오늘 날짜 반환
+            return new Date().toISOString().split('T')[0];
+        }
+    };
+
     const allowedPages = [
-        { url: '/', changefreq: 'weekly', priority: '1.0', lastmod: '2026-03-12' },
-        { url: '/how-to-use', changefreq: 'monthly', priority: '0.7', lastmod: '2026-03-08'  },
-        { url: '/blog', changefreq: 'weekly', priority: '0.9', lastmod: '2026-03-13' },
-        { url: '/blog/tools-comparsion', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' },
-        { url: '/blog/notetaking', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-14' },
-        { url: '/faq', changefreq: 'weekly', priority: '0.8', lastmod: '2026-03-13' }
+        { url: '/', changefreq: 'weekly', priority: '1.0', lastmod: getLastMod('index.ejs') },
+        { url: '/how-to-use', changefreq: 'monthly', priority: '0.7', lastmod: getLastMod('how-to-use.ejs') },
+        { url: '/blog', changefreq: 'weekly', priority: '0.9', lastmod: getLastMod('blog.ejs') },
+        { url: '/blog/tools-comparison', changefreq: 'weekly', priority: '0.8', lastmod: getLastMod('blog/tools-comparison.ejs') },
+        { url: '/blog/notetaking', changefreq: 'weekly', priority: '0.8', lastmod: getLastMod('blog/notetaking.ejs') },
+        { url: '/faq', changefreq: 'weekly', priority: '0.8', lastmod: getLastMod('faq.ejs') }
     ];
 
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
@@ -147,6 +161,7 @@ app.get('/sitemap.xml', (req, res) => {
             <priority>${page.priority}</priority>
         </url>`).join('')}
         </urlset>`;
+        
     res.header('Content-Type', 'application/xml');
     res.send(sitemap);
 });
