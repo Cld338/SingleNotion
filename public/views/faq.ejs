@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FAQ | Single Notion</title>
     <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
-    <meta name="description" content="Single Notion 노션 PDF 변환 서비스 이용과 관련된 자주 묻는 질문(FAQ)입니다. 변환 오류, 단일 페이지 및 A4 규격 차이 등을 확인하세요.">
-    <meta name="keywords" content="노션 PDF, Single Notion FAQ, 노션 오류, PDF 변환 실패">
+    <meta name="description" content="노션(Notion) 문서를 데이터 잘림 없이 PDF로 변환하는 Single Notion의 자주 묻는 질문입니다. 포트폴리오 제출, 굿노트 필기 앱 활용, 비공개 페이지 변환 방법 등을 확인하세요.">
+    <meta name="keywords" content="노션 PDF, Single Notion FAQ, 노션 오류, PDF 변환 실패, 굿노트 노션, 노션 포트폴리오">
     <link rel="canonical" href="https://notion-pdf.cld338.me/faq">
 
     <meta property="og:type" content="website">
     <meta property="og:title" content="FAQ - Single Notion">
-    <meta property="og:description" content="Single Notion 노션 PDF 변환 서비스 이용과 관련된 자주 묻는 질문(FAQ)입니다.">
+    <meta property="og:description" content="노션 PDF 변환 서비스 이용과 관련된 자주 묻는 질문(FAQ)입니다.">
     <meta property="og:image" content="https://notion-pdf.cld338.me/images/og-image-new.png">
     <meta property="og:url" content="https://notion-pdf.cld338.me/faq">
 
@@ -26,17 +26,24 @@
       "@type": "FAQPage",
       "mainEntity": [{
         "@type": "Question",
-        "name": "변환이 실패합니다. 어떻게 해야 하나요?",
+        "name": "제출용 이력서나 포트폴리오 노션 페이지를 PDF로 변환하려고 하는데 실패합니다. 어떻게 해결하나요?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "노션 페이지 우측 상단의 '공유' 설정에서 '게시(웹에서 게시)'가 활성화되어 있는지 확인해 주세요. 비공개 페이지는 변환할 수 없습니다."
+          "text": "노션 페이지 우측 상단의 '공유' 설정에서 '게시(웹에서 게시)'가 활성화되어 있는지 확인해 주십시오. Single Notion은 보안상 외부 접근이 허용된 공개 링크만 변환할 수 있습니다. 변환이 완료된 후 다시 비공개로 전환하시면 안전하게 관리할 수 있습니다."
         }
       }, {
         "@type": "Question",
-        "name": "단일 페이지와 A4 규격의 차이가 무엇인가요?",
+        "name": "노션 데이터베이스 표나 갤러리 뷰가 잘리지 않게 한 장의 PDF로 저장하려면 어떤 옵션을 선택해야 하나요?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "단일 페이지는 내용의 길이에 맞춰 하나의 긴 PDF로 저장되어 웹에서 읽기 적합하며, A4 규격은 인쇄를 목적으로 페이지를 나누어 저장합니다."
+          "text": "데이터베이스 표가 포함된 사내 문서나 굿노트(GoodNotes)와 같은 태블릿 필기 앱에서 사용할 목적이라면 '단일 페이지' 옵션을 권장합니다. 문서 내용 길이에 맞춰 끊김 없는 하나의 긴 PDF로 저장됩니다. 반면, 실제 종이 인쇄나 표준 규격 제출이 목적이라면 'A4 규격'을 선택하여 페이지를 나누어 저장하십시오."
+        }
+      }, {
+        "@type": "Question",
+        "name": "2026년 최신 노션 UI에서도 원래 레이아웃과 디자인이 그대로 유지되나요?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "네, Single Notion은 2026년 최신 노션 업데이트가 반영된 렌더링 엔진을 사용합니다. 다단 레이아웃, 커버 배너 이미지, 복잡한 표 데이터 등 원본 노션 페이지의 디자인 비율을 100% 그대로 유지하여 변환합니다."
         }
       }]
     }
@@ -51,7 +58,7 @@
         .faq-title { text-align: center; margin-bottom: 3rem; font-size: 2rem; color: #333; }
         .faq-item { background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #eee; }
         .faq-question { font-weight: 700; font-size: 1.1rem; color: #111; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 10px; }
-        .faq-answer { color: #555; line-height: 1.6; }
+        .faq-answer { color: #555; line-height: 1.6; margin-top: 10px; }
     </style>
 
     <%- include('partials/analytics-head') %>
@@ -68,19 +75,28 @@
             <dl class="faq-list">
                 <div class="faq-item">
                     <dt class="faq-question">
-                        <i class="fa-solid fa-q"></i> 변환이 실패합니다. 어떻게 해야 하나요?
+                        <i class="fa-solid fa-q"></i> 제출용 이력서나 포트폴리오 노션 페이지를 PDF로 변환하려고 하는데 실패합니다. 어떻게 해결하나요?
                     </dt>
                     <dd class="faq-answer">
-                        노션 페이지 우측 상단의 '공유' 설정에서 '게시(웹에서 게시)'가 활성화되어 있는지 확인해 주세요. 비공개 페이지는 변환할 수 없습니다.
+                        노션 페이지 우측 상단의 '공유' 설정에서 '게시(웹에서 게시)'가 활성화되어 있는지 확인해 주십시오. Single Notion은 보안상 외부 접근이 허용된 공개 링크만 변환할 수 있습니다. 변환이 완료된 후 다시 비공개로 전환하시면 안전하게 관리할 수 있습니다.
                     </dd>
                 </div>
 
                 <div class="faq-item">
                     <dt class="faq-question">
-                        <i class="fa-solid fa-q"></i> 단일 페이지와 A4 규격의 차이가 무엇인가요?
+                        <i class="fa-solid fa-q"></i> 노션 데이터베이스 표나 갤러리 뷰가 잘리지 않게 한 장의 PDF로 저장하려면 어떤 옵션을 선택해야 하나요?
                     </dt>
                     <dd class="faq-answer">
-                        단일 페이지는 내용의 길이에 맞춰 하나의 긴 PDF로 저장되어 웹에서 읽기 적합하며, A4 규격은 인쇄를 목적으로 페이지를 나누어 저장합니다.
+                        데이터베이스 표가 포함된 사내 문서나 굿노트(GoodNotes)와 같은 태블릿 필기 앱에서 사용할 목적이라면 '단일 페이지' 옵션을 권장합니다. 문서 내용 길이에 맞춰 끊김 없는 하나의 긴 PDF로 저장됩니다. 반면, 실제 종이 인쇄나 표준 규격 제출이 목적이라면 'A4 규격'을 선택하여 페이지를 나누어 저장하십시오.
+                    </dd>
+                </div>
+
+                <div class="faq-item">
+                    <dt class="faq-question">
+                        <i class="fa-solid fa-q"></i> 2026년 최신 노션 UI에서도 원래 레이아웃과 디자인이 그대로 유지되나요?
+                    </dt>
+                    <dd class="faq-answer">
+                        네, Single Notion은 2026년 최신 노션 업데이트가 반영된 렌더링 엔진을 사용합니다. 다단 레이아웃, 커버 배너 이미지, 복잡한 표 데이터 등 원본 노션 페이지의 디자인 비율을 100% 그대로 유지하여 변환합니다.
                     </dd>
                 </div>
             </dl>
