@@ -1,172 +1,15 @@
 ﻿const { Readable } = require('stream');
 const logger = require('../utils/logger');
 const browserPool = require('../utils/browserPool');
+const URLPathConverter = require('../utils/urlPathConverter');
+const CSSTemplates = require('../utils/cssTemplates');
+const PageEvaluationScripts = require('../utils/pageEvaluationScripts');
 const { log } = require('console');
 
 class PdfService {
     // 상대 경로를 절대 경로로 변환
     convertRelativeToAbsolutePaths(html, baseUrl) {
-        try {
-            const parser = new URL(baseUrl);
-            const baseOrigin = parser.origin;
-
-            // HTML을 정규식으로 처리하여 상대 경로 변환
-            let processedHtml = html;
-
-            // src 속성 변환 (이미지, 스크립트, iframe 등)
-            processedHtml = processedHtml.replace(
-                /(?:src|href)=["'](?!(?:http|https|data:|\/\/))([^"']+)["']/gi,
-                (match, path) => {
-                    try {
-                        let resolvedUrl;
-                        if (path.startsWith('/')) {
-                            // 절대 경로(/로 시작): baseOrigin + path
-                            resolvedUrl = `${baseOrigin}${path}`;
-                        } else {
-                            // 상대 경로: baseUrl + path
-                            resolvedUrl = new URL(path, baseUrl).href;
-                        }
-                        return match.replace(path, resolvedUrl);
-                    } catch (err) {
-                        logger.warn(`Failed to convert path: ${path}, error: ${err.message}`);
-                        return match;
-                    }
-                }
-            );
-
-            // background-image URL 변환
-            processedHtml = processedHtml.replace(
-                /background-image\s*:\s*url\s*\(\s*([^)]*)\s*\)/gi,
-                (match, rawPath) => {
-                    try {
-                        // 원본 따옴표 여부 및 형식 확인
-                        let hasQuote = false;
-                        let quoteFormat = null; // '"', "'", or '&quot;'
-                        const trimmedRaw = rawPath.trim();
-                        
-                        if (trimmedRaw.startsWith('"')) {
-                            hasQuote = true;
-                            quoteFormat = '"';
-                        } else if (trimmedRaw.startsWith("'")) {
-                            hasQuote = true;
-                            quoteFormat = "'";
-                        } else if (trimmedRaw.startsWith('&quot;')) {
-                            hasQuote = true;
-                            quoteFormat = '&quot;';
-                        }
-                        
-                        // 경로에서 공백, 따옴표, 특수 문자 제거
-                        let cleanPath = rawPath
-                            .trim()
-                            .replace(/^["']+|["']+$/g, '')       // 시작/끝 따옴표 제거 (여러 개)
-                            .replace(/&quot;/g, '')              // HTML 엔티티 따옴표 제거
-                            .replace(/&#34;/g, '')              // 수치 HTML 엔티티 제거
-                            .trim();
-                        
-                        if (!cleanPath) {
-                            return match;
-                        }
-                        // http, https, data, // 로 시작하지 않는 경우만 처리
-                        if (cleanPath.startsWith('http') || cleanPath.startsWith('data:') || cleanPath.startsWith('//')) {
-                            return match;
-                        }
-                        
-                        let resolvedUrl;
-                        if (cleanPath.startsWith('/')) {
-                            resolvedUrl = `${baseOrigin}${cleanPath}`;
-                        } else {
-                            resolvedUrl = new URL(cleanPath, baseUrl).href;
-                        }
-                        
-                        // 원본 따옴표 형식으로 복원
-                        if (hasQuote) {
-                            if (quoteFormat === '&quot;') {
-                                return `background-image: url(&quot;${resolvedUrl}&quot;)`;
-                            } else {
-                                return `background-image: url(${quoteFormat}${resolvedUrl}${quoteFormat})`;
-                            }
-                        } else {
-                            return `background-image: url(${resolvedUrl})`;
-                        }
-                    } catch (err) {
-                        logger.warn(`Failed to convert background URL: ${rawPath}`);
-                        return match;
-                    }
-                }
-            );
-
-            // style 속성 내의 url() 변환
-            processedHtml = processedHtml.replace(
-                /style=["']([^"']*)["']/gi,
-                (match, styleContent) => {
-                    let updatedStyle = styleContent.replace(
-                        /url\s*\(\s*([^)]*)\s*\)/g,
-                        (urlMatch, rawPath) => {
-                            try {
-                                // 원본 따옴표 여부 및 형식 확인
-                                let hasQuote = false;
-                                let quoteFormat = null; // '"', "'", or '&quot;'
-                                const trimmedRaw = rawPath.trim();
-                                
-                                if (trimmedRaw.startsWith('"')) {
-                                    hasQuote = true;
-                                    quoteFormat = '"';
-                                } else if (trimmedRaw.startsWith("'")) {
-                                    hasQuote = true;
-                                    quoteFormat = "'";
-                                } else if (trimmedRaw.startsWith('&quot;')) {
-                                    hasQuote = true;
-                                    quoteFormat = '&quot;';
-                                }
-                                
-                                // 경로에서 공백, 따옴표, 특수 문자 제거
-                                let cleanPath = rawPath
-                                    .trim()
-                                    .replace(/^["']+|["']+$/g, '')       // 시작/끝 따옴표 제거 (여러 개)
-                                    .replace(/&quot;/g, '')              // HTML 엔티티 따옴표 제거
-                                    .replace(/&#34;/g, '')              // 수치 HTML 엔티티 제거
-                                    .trim();
-                                
-                                if (!cleanPath) {
-                                    return urlMatch;
-                                }
-                                // http, https, data, // 로 시작하지 않는 경우만 처리
-                                if (cleanPath.startsWith('http') || cleanPath.startsWith('data:') || cleanPath.startsWith('//')) {
-                                    return urlMatch;
-                                }
-                                
-                                let resolvedUrl;
-                                if (cleanPath.startsWith('/')) {
-                                    resolvedUrl = `${baseOrigin}${cleanPath}`;
-                                } else {
-                                    resolvedUrl = new URL(cleanPath, baseUrl).href;
-                                }
-                                
-                                // 원본 따옴표 형식으로 복원
-                                if (hasQuote) {
-                                    if (quoteFormat === '&quot;') {
-                                        return `url(&quot;${resolvedUrl}&quot;)`;
-                                    } else {
-                                        return `url(${quoteFormat}${resolvedUrl}${quoteFormat})`;
-                                    }
-                                } else {
-                                    return `url(${resolvedUrl})`;
-                                }
-                            } catch (err) {
-                                logger.warn(`Failed to convert style URL: ${rawPath}`);
-                                return urlMatch;
-                            }
-                        }
-                    );
-                    return `style="${updatedStyle}"`;
-                }
-            );
-
-            return processedHtml;
-        } catch (err) {
-            logger.warn(`Error converting relative paths: ${err.message}`);
-            return html;
-        }
+        return URLPathConverter.convertAll(html, baseUrl);
     }
 
     // 노션 페이지의 콘텐츠 너비 및 HTML 측정 (미리보기용)
@@ -827,13 +670,11 @@ class PdfService {
             const dimensions = await page.evaluate(async (opts) => {
                 const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = opts;
 
-                // A. 너비 자동 감지 (popup.js 로직)
+                // A. 너비 자동 감지
                 const contentEl = document.querySelector('.notion-page-content');
                 const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
 
                 const scale = pageWidth ? (pageWidth / detectedWidth) : 1;
-
-                // 상하좌우 패딩 값 설정 (기본값 0)
                 const padTop = (Number(marginTop) || 0) / scale;
                 const padBottom = (Number(marginBottom) || 0) / scale;
                 const padLeft = (Number(marginLeft) || 0) / scale;
@@ -842,7 +683,6 @@ class PdfService {
                 // ✅ KaTeX CSS 명시적 로드
                 const loadKaTeXCSS = async () => {
                     return new Promise((resolve) => {
-                        // KaTeX CSS가 이미 있는지 확인
                         const existingKaTeX = document.querySelector('link[href*="katex"]');
                         if (existingKaTeX) {
                             console.log('[KaTeX] CSS already loaded from CDN');
@@ -850,7 +690,6 @@ class PdfService {
                             return;
                         }
                         
-                        // 없으면 CDN에서 로드
                         const link = document.createElement('link');
                         link.rel = 'stylesheet';
                         link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
@@ -863,71 +702,62 @@ class PdfService {
                         
                         link.onerror = () => {
                             console.warn('[KaTeX] CSS load failed, continuing anyway');
-                            resolve();  // 에러나도 계속 진행
+                            resolve();
                         };
                         
-                        // 3초 타임아웃
                         setTimeout(resolve, 3000);
-                        
                         document.head.appendChild(link);
                     });
                 };
                 
                 await loadKaTeXCSS();
 
+                // 시각적 완성 대기
                 async function waitForVisualComplete() {
                     console.time("VisualComplete");
 
-                    // 1. 웹 폰트 로딩 대기 (타임아웃 추가)
                     try {
                         await Promise.race([
                             document.fonts.ready,
-                            new Promise(resolve => setTimeout(resolve, 5000))  // ✅ 5초 타임아웃
+                            new Promise(resolve => setTimeout(resolve, 5000))
                         ]);
                     } catch (err) {
                         console.warn(`Font loading timeout/error: ${err.message}`);
                     }
 
-                    // 2. ✅ 이미지 선별적 디코딩 (메모리 최적화)
                     const visibleImages = Array.from(document.querySelectorAll('img'))
                         .filter(img => {
-                            // 보이는 이미지만 필터링
                             if (!img.src) return false;
                             const rect = img.getBoundingClientRect();
-                            return rect.width > 0 && rect.height > 0;  // 실제 크기가 있는 이미지만
+                            return rect.width > 0 && rect.height > 0;
                         })
-                        .slice(0, 50);  // ✅ 최대 50개로 제한
+                        .slice(0, 50);
                     
                     const imagePromises = visibleImages.map(img => {
-                        // 각 이미지마다 1초 타임아웃 적용
                         return Promise.race([
                             img.decode().catch(err => {
                                 console.warn(`이미지 디코딩 실패: ${img.src}`, err);
                             }),
-                            new Promise(resolve => setTimeout(resolve, 1000))  // ✅ 1초 타임아웃
+                            new Promise(resolve => setTimeout(resolve, 1000))
                         ]);
                     });
                     
                     await Promise.all(imagePromises);
 
-                    // 3. ✅ KaTeX/MathJax 렌더링 완료 대기
                     try {
-                        // KaTeX 렌더링 완료 감지
                         const hasKaTeX = document.querySelectorAll('.katex').length > 0;
                         if (hasKaTeX) {
                             console.log(`[KaTeX] Found ${document.querySelectorAll('.katex').length} KaTeX elements`);
-                            // KaTeX 렌더링 완료 감지: DOM 안정화 확인
                             await new Promise((resolve) => {
                                 let isStable = false;
                                 let checkCount = 0;
-                                const maxChecks = 10;  // 최대 10번 확인 (5초)
+                                const maxChecks = 10;
                                 
                                 const checkKaTeXReady = () => {
                                     checkCount++;
                                     const currentKaTeXCount = document.querySelectorAll('.katex').length;
                                     console.log(`[KaTeX] Check ${checkCount}: ${currentKaTeXCount} elements`);
                                     
-                                    // 이전 확인과 KaTeX 개수가 같으면 안정화됨
                                     if (isStable || checkCount >= maxChecks) {
                                         console.log(`[KaTeX] Rendering stable at check ${checkCount}`);
                                         resolve();
@@ -939,7 +769,7 @@ class PdfService {
                                             resolve();
                                         }
                                         window._previousKaTeXCount = currentKaTeXCount;
-                                        setTimeout(checkKaTeXReady, 500);  // 500ms 간격 확인
+                                        setTimeout(checkKaTeXReady, 500);
                                     }
                                 };
                                 
@@ -947,13 +777,12 @@ class PdfService {
                             });
                         }
                         
-                        // MathJax 렌더링 완료 감지
                         if (window.MathJax && window.MathJax.typesetPromise) {
                             console.log(`[MathJax] Found, waiting for typeset...`);
                             try {
                                 await Promise.race([
                                     window.MathJax.typesetPromise(),
-                                    new Promise(resolve => setTimeout(resolve, 3000))  // 3초 타임아웃
+                                    new Promise(resolve => setTimeout(resolve, 3000))
                                 ]);
                                 console.log(`[MathJax] Typeset complete`);
                             } catch (err) {
@@ -964,7 +793,6 @@ class PdfService {
                         console.warn(`KaTeX/MathJax check failed: ${err.message}`);
                     }
 
-                    // 4. 브라우저 페인팅 사이클 대기
                     return new Promise(resolve => {
                         requestAnimationFrame(() => {
                         requestAnimationFrame(() => {
@@ -973,12 +801,11 @@ class PdfService {
                         });
                         });
                     });
-                    }
+                }
 
-                    
                 await waitForVisualComplete();
 
-                // C. 레이아웃 요소 크기 고정 (Freeze)
+                // 레이아웃 고정 CSS 생성
                 let freezeCSS = "";
                 const layoutElements = document.querySelectorAll('.notion-image-block, .notion-asset-wrapper, div[data-block-id][style*="width"]');
                 layoutElements.forEach((el, index) => {
@@ -994,158 +821,16 @@ class PdfService {
                         }\n`;
                 });
 
-                // D. Extension 기반 스타일 주입 (감지된 너비 사용)
-                const padTopIdx = includeBanner ? 3 : (includeTags ? 4 : 5); // 배너 포함 시 첫 번째 레이아웃에 패딩 적용
+                // 동적 스타일 생성
+                const padTopIdx = includeBanner ? 3 : (includeTags ? 4 : 5);
                 const totalLayoutWidth = detectedWidth + padLeft + padRight;
-                let dynamicStyles = `
-                    .notion-page-content {
-                        width: ${detectedWidth}px !important;
-                        max-width: ${detectedWidth}px !important;
-                        min-width: ${detectedWidth}px !important;
-                    }
-
-                    .notion-sidebar-container, 
-                    .notion-topbar, 
-                    .notion-topbar-mobile,
-                    .notion-help-button,
-                    #skip-to-content,
-                    header,
-                    .autolayout-fill-width,
-                    .notion-history-container
-                    { display: none !important; }
-
-                    .notion-floating-table-of-contents {
-                        height: 1px !important;
-                    }
-                    
-                    div[role="table"][aria-label="Page properties"] + div,
-                    div[role="table"][aria-label="페이지 속성"] + div
-                    { display: none !important; }
-
-                    .notion-scroller{
-                        overflow: hidden !important;
-                    }
-
-                    .notion-selectable-container > .notion-scroller { 
-                        overflow: visible !important; 
-                        height: auto !important;
-                    }
-                    /* 코드 텍스트 줄바꿈 강제 및 공백 유지 */
-                    .notion-code-block, .notion-code-block span {
-                        white-space: pre-wrap !important;
-                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
-                    }
-                    
-                    .notion-app-inner, .notion-cursor-listener { height: auto !important; }
-                    
-                    ::-webkit-scrollbar { display: none !important; }
-
-                    .layout > .layout-content:nth-child(${padTopIdx}) { padding-top: ${padTop}px !important; }
-
-                    .whenContentEditable, .layout, .layout-content {
-                        width: ${totalLayoutWidth}px !important;
-                        max-width: ${totalLayoutWidth}px !important;
-                        min-width: ${totalLayoutWidth}px !important;
-                    }
-
-
-                    .layout {
-                        padding-bottom: ${padBottom}px !important;
-                        --margin-width: 0px !important;
-                    }
-
-                    .layout-content { 
-                        padding-left: ${padLeft}px !important; 
-                        padding-right: ${padRight}px !important;
-                    }
-                    
-                    /* ✅ KaTeX 렌더링 개선 */
-                    .katex {
-                        display: inline-block;
-                        white-space: nowrap;
-                        font-size: 1em;
-                        font-feature-settings: "kern" 1;
-                        -webkit-font-smoothing: antialiased;
-                        -moz-osx-font-smoothing: grayscale;
-                    }
-                    
-                    .katex-display {
-                        display: block;
-                        margin: 0.5em 0 !important;
-                        padding: 0 !important;
-                        text-align: center;
-                        overflow-x: auto;
-                        overflow-y: hidden;
-                    }
-                    
-                    .katex-html {
-                        display: inline-block;
-                        width: auto;
-                        color: inherit;
-                    }
-                    
-                    .katex-mathml,
-                    .katex-display .katex-mathml,
-                    .katex > .katex-mathml,
-                    .annotation {
-                        display: none !important;
-                    }
-                    
-                    /* ✅ KaTeX base 요소 명시 */
-                    .katex.katex-display::after {
-                        content: "";
-                    }
-                    
-                    /* ✅ 모든 KaTeX 자식 요소 스타일 보존 */
-                    .katex * {
-                        border: 0;
-                        margin: 0;
-                        padding: 0;
-                        position: relative;
-                    }
-                    
-                    .katex .base {
-                        position: relative;
-                        display: inline-block;
-                        white-space: nowrap;
-                        width: min-content;
-                    }
-                    
-                    .katex .strut {
-                        display: inline-block;
-                        zoom: 1;
-                        height: 0;
-                        width: 0;
-                    }
-                    
-                    .katex .sizing, 
-                    .katex .fontsize-multiplier {
-                        display: inline-block;
-                    }
-                    
-                    .katex .mord, .katex .mop, .katex .mbin, .katex .mrel, 
-                    .katex .mopen, .katex .mclose, .katex .mpunct, .katex .minner {
-                        position: relative;
-                        display: inline-block;
-                    }
-                    
-                    /* KaTeX HTML은 반드시 표시 */
-                    .katex-html {
-                        display: inline-block;
-                    } 
-                `;
-
-                if (!includeTitle) dynamicStyles += `h1, .notion-page-block:has(h1) { display: none !important; }`;
-                if (!includeBanner) dynamicStyles += `.layout-full .notion-page-cover-wrapper, .layout-content .notion-record-icon, .notion-page-controls { display: none !important; }`;
-                if (!includeTags) dynamicStyles += `[aria-label="페이지 속성"], [aria-label="Page properties"] { display: none !important; }`;
-                if (!includeDiscussion) dynamicStyles += `.layout-content-with-divider:has(.notion-page-view-discussion) { display: none !important;}`;
-
+                
                 const styleTag = document.createElement('style');
                 styleTag.id = 'sn-pdf-style';
-                styleTag.innerHTML = dynamicStyles + freezeCSS; 
+                styleTag.innerHTML = freezeCSS;
                 document.head.appendChild(styleTag);
 
-                // E. 공백 및 개행 처리
+                // 공백 및 개행 처리
                 const spans = document.querySelectorAll('span[data-token-index="0"]');
                 spans.forEach(span => {
                     let text = span.textContent;
@@ -1156,27 +841,25 @@ class PdfService {
 
                 window.dispatchEvent(new Event('resize'));
                 
-                // ✅ 페이지 복잡도에 따른 동적 대기 시간
+                // 페이지 복잡도에 따른 동적 대기
                 const elementCount = document.querySelectorAll('*').length;
-                const hasKaTeX = document.querySelectorAll('.katex').length > 0;  // ✅ KaTeX 감지
-                const hasMathJax = !!window.MathJax;  // ✅ MathJax 감지
+                const hasKaTeX = document.querySelectorAll('.katex').length > 0;
+                const hasMathJax = !!window.MathJax;
                 
-                let waitTime = 2000;  // 기본값 2초
+                let waitTime = 2000;
                 
-                // KaTeX/MathJax가 있으면 최소 2.5초 이상 대기
                 if (hasKaTeX || hasMathJax) {
                     waitTime = Math.max(2500, waitTime);
                     console.log(`KaTeX/MathJax detected, increasing wait time to ${waitTime}ms`);
                 }
                 
-                // 페이지 복잡도에 따른 추가 조정
-                if (elementCount > 5000) waitTime = Math.max(3000, waitTime);      // 복잡: 3초 이상
-                else if (elementCount > 1000) waitTime = Math.max(2500, waitTime); // 중간: 2.5초 이상
-                else waitTime = Math.max(1500, waitTime);                          // 간단: 1.5초 이상
+                if (elementCount > 5000) waitTime = Math.max(3000, waitTime);
+                else if (elementCount > 1000) waitTime = Math.max(2500, waitTime);
+                else waitTime = Math.max(1500, waitTime);
                 
                 await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, waitTime)));
 
-                // F. 최종 높이 재계산
+                // 최종 높이 재계산
                 const selectors = ['.notion-page-content', '.layout'];
                 let contentHeight = 0;
                 for (const selector of selectors) {
@@ -1196,7 +879,7 @@ class PdfService {
                     padBottom: padBottom,
                     padLeft: padLeft,
                     padRight: padRight,
-                    scale: scale // 계산된 스케일을 반환하여 외부에서 사용
+                    scale: scale
                 };
             }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
 
