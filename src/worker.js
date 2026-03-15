@@ -5,10 +5,28 @@ const pdfService = require('./services/pdfService');
 const storage = require('./utils/storage');
 const logger = require('./utils/logger');
 
+// ✅ 메모리 모니터링 함수
+function logMemoryUsage(label) {
+    const memUsage = process.memoryUsage();
+    const heapUsed = Math.round(memUsage.heapUsed / 1024 / 1024);
+    const heapTotal = Math.round(memUsage.heapTotal / 1024 / 1024);
+    const rss = Math.round(memUsage.rss / 1024 / 1024);
+    
+    logger.info(`[Memory ${label}] Heap: ${heapUsed}MB / ${heapTotal}MB, RSS: ${rss}MB`);
+}
+
+// ✅ 주기적 메모리 모니터링 (30초 마다)
+const memoryMonitorInterval = setInterval(() => {
+    logMemoryUsage('Monitor');
+}, 30000);
+
 // Worker 인스턴스 생성 및 안정화 설정
 const worker = new Worker('pdf-conversion', async (job) => {
     const { targetUrl, options } = job.data;
     logger.info(`[Job ${job.id}] Start processing: ${targetUrl} (Attempt: ${job.attemptsMade + 1})`);
+    
+    // ✅ 작업 시작 메모리 측정
+    logMemoryUsage(`Start Job ${job.id}`);
 
     const startTime = performance.now(); // 변환 시작 시간 기록
 
@@ -25,11 +43,18 @@ const worker = new Worker('pdf-conversion', async (job) => {
 
         logger.info(`[Job ${job.id}] Successfully completed in ${durationSec} seconds`);
         
+        // ✅ 작업 완료 메모리 측정
+        logMemoryUsage(`End Job ${job.id}`);
+        
         // 변경: 클라이언트 측으로 원본 너비(detectedWidth) 데이터 함께 전달
         return { downloadUrl, fileName, duration: durationSec, detectedWidth };
 
     } catch (error) {
         logger.error(`[Job ${job.id}] Failed attempt ${job.attemptsMade + 1}: ${error.message}`);
+        
+        // ✅ 에러 발생 메모리 측정
+        logMemoryUsage(`Error Job ${job.id}`);
+        
         throw error;
     }
 }, {
@@ -40,6 +65,12 @@ const worker = new Worker('pdf-conversion', async (job) => {
 
 const gracefulShutdown = async (signal) => {
     logger.info(`Received ${signal}. Closing worker...`);
+    
+    // ✅ 종료 시 메모리 상태 기록
+    logMemoryUsage(`before ${signal}`);
+    
+    clearInterval(memoryMonitorInterval);  // ✅ 모니터링 정지
+    
     await worker.close();
     // connection.quit()은 queue.js를 사용하는 다른 프로세스에 영향을 줄 수 있으므로 
     // 워커 단독 종료 시에는 worker.close()만 수행하여 안전하게 종료합니다.

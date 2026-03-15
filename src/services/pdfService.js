@@ -256,7 +256,57 @@ class PdfService {
                     });
                 });
                 
-                // 4. 추가 지연 (CSS 애니메이션 완료)
+                // 4. ✅ KaTeX/MathJax 렌더링 완료 대기
+                try {
+                    const hasKaTeX = document.querySelectorAll('.katex').length > 0;
+                    if (hasKaTeX) {
+                        console.log(`[Preview] Found ${document.querySelectorAll('.katex').length} KaTeX elements`);
+                        await new Promise((resolve) => {
+                            let isStable = false;
+                            let checkCount = 0;
+                            const maxChecks = 10;
+                            
+                            const checkKaTeXReady = () => {
+                                checkCount++;
+                                const currentKaTeXCount = document.querySelectorAll('.katex').length;
+                                console.log(`[Preview-KaTeX] Check ${checkCount}: ${currentKaTeXCount} elements`);
+                                
+                                if (isStable || checkCount >= maxChecks) {
+                                    console.log(`[Preview-KaTeX] Rendering complete`);
+                                    resolve();
+                                } else {
+                                    if (checkCount > 1 && currentKaTeXCount === 
+                                        (window._previewKaTeXCount || 0)) {
+                                        isStable = true;
+                                        console.log(`[Preview-KaTeX] Stable at check ${checkCount}`);
+                                        resolve();
+                                    }
+                                    window._previewKaTeXCount = currentKaTeXCount;
+                                    setTimeout(checkKaTeXReady, 500);
+                                }
+                            };
+                            
+                            checkKaTeXReady();
+                        });
+                    }
+                    
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        console.log(`[Preview-MathJax] Found, waiting for typeset...`);
+                        try {
+                            await Promise.race([
+                                window.MathJax.typesetPromise(),
+                                new Promise(resolve => setTimeout(resolve, 3000))
+                            ]);
+                            console.log(`[Preview-MathJax] Typeset complete`);
+                        } catch (err) {
+                            console.warn(`Preview MathJax typeset error: ${err.message}`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn(`Preview KaTeX/MathJax check failed: ${err.message}`);
+                }
+                
+                // 5. 추가 지연 (CSS 애니메이션 + 렌더링 완료)
                 await new Promise(resolve => setTimeout(resolve, 2000));
             });
 
@@ -697,8 +747,21 @@ class PdfService {
 
             return result;
         } finally {
-            if (page) await page.close();
-            await browserPool.release(browser);
+            // ✅ 명시적 정리 추가
+            try {
+                if (page) {
+                    page.removeAllListeners();
+                    await this._cleanupPageResources(page);
+                }
+            } catch (err) {
+                logger.warn(`Error during getPreviewData cleanup: ${err.message}`);
+            }
+            
+            try {
+                await browserPool.release(browser);
+            } catch (err) {
+                logger.warn(`Error releasing browser from pool: ${err.message}`);
+            }
         }
     }
 
@@ -741,6 +804,25 @@ class PdfService {
 
             await page.goto(url, { waitUntil: 'networkidle0' });
 
+            // ✅ KaTeX CSS를 페이지에 명시적으로 주입 (PDF 렌더링 개선)
+            logger.info('Injecting KaTeX CSS for PDF rendering...');
+            try {
+                await page.addStyleTag({
+                    url: 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+                    crossorigin: 'anonymous'
+                });
+                logger.info('KaTeX CSS injected successfully');
+            } catch (err) {
+                // CDN 실패해도 계속 진행 (Notion 페이지에 이미 있을 수 있음)
+                logger.debug(`KaTeX CSS injection attempted: ${err.message}`);
+            }
+            
+            // ✅ 모든 기존 stylesheet 확인
+            const stylesheetCount = await page.evaluate(() => {
+                return document.querySelectorAll('link[rel="stylesheet"]').length;
+            });
+            logger.info(`Found ${stylesheetCount} stylesheets on page`);
+
             // [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
             const dimensions = await page.evaluate(async (opts) => {
                 const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = opts;
@@ -757,31 +839,132 @@ class PdfService {
                 const padLeft = (Number(marginLeft) || 0) / scale;
                 const padRight = (Number(marginRight) || 0) / scale;
 
+                // ✅ KaTeX CSS 명시적 로드
+                const loadKaTeXCSS = async () => {
+                    return new Promise((resolve) => {
+                        // KaTeX CSS가 이미 있는지 확인
+                        const existingKaTeX = document.querySelector('link[href*="katex"]');
+                        if (existingKaTeX) {
+                            console.log('[KaTeX] CSS already loaded from CDN');
+                            resolve();
+                            return;
+                        }
+                        
+                        // 없으면 CDN에서 로드
+                        const link = document.createElement('link');
+                        link.rel = 'stylesheet';
+                        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+                        link.crossOrigin = 'anonymous';
+                        
+                        link.onload = () => {
+                            console.log('[KaTeX] CSS loaded successfully');
+                            resolve();
+                        };
+                        
+                        link.onerror = () => {
+                            console.warn('[KaTeX] CSS load failed, continuing anyway');
+                            resolve();  // 에러나도 계속 진행
+                        };
+                        
+                        // 3초 타임아웃
+                        setTimeout(resolve, 3000);
+                        
+                        document.head.appendChild(link);
+                    });
+                };
+                
+                await loadKaTeXCSS();
+
                 async function waitForVisualComplete() {
                     console.time("VisualComplete");
 
-                    // 1. 웹 폰트 로딩 대기 (FOIT/FOUT 방지)
-                    // 모든 폰트가 로드되거나 실패할 때까지 기다립니다.
-                    await document.fonts.ready;
+                    // 1. 웹 폰트 로딩 대기 (타임아웃 추가)
+                    try {
+                        await Promise.race([
+                            document.fonts.ready,
+                            new Promise(resolve => setTimeout(resolve, 5000))  // ✅ 5초 타임아웃
+                        ]);
+                    } catch (err) {
+                        console.warn(`Font loading timeout/error: ${err.message}`);
+                    }
 
-                    // 2. 이미지 로딩 및 디코딩 대기
-                    // 단순히 로드된 상태가 아니라, 브라우저가 픽셀을 그릴 준비(Decode)가 되었는지 확인합니다.
-                    const images = Array.from(document.querySelectorAll('img'));
-                    const imagePromises = images.map(img => {
-                        // 소스가 없거나 이미 디코딩에 실패한 경우 제외
-                        if (!img.src) return Promise.resolve();
-                        
-                        // img.decode()는 이미지가 메모리에 로드되고 픽셀 데이터가 준비되면 resolve됩니다.
-                        return img.decode().catch(err => {
-                        console.warn(`이미지 디코딩 실패: ${img.src}`, err);
-                        });
+                    // 2. ✅ 이미지 선별적 디코딩 (메모리 최적화)
+                    const visibleImages = Array.from(document.querySelectorAll('img'))
+                        .filter(img => {
+                            // 보이는 이미지만 필터링
+                            if (!img.src) return false;
+                            const rect = img.getBoundingClientRect();
+                            return rect.width > 0 && rect.height > 0;  // 실제 크기가 있는 이미지만
+                        })
+                        .slice(0, 50);  // ✅ 최대 50개로 제한
+                    
+                    const imagePromises = visibleImages.map(img => {
+                        // 각 이미지마다 1초 타임아웃 적용
+                        return Promise.race([
+                            img.decode().catch(err => {
+                                console.warn(`이미지 디코딩 실패: ${img.src}`, err);
+                            }),
+                            new Promise(resolve => setTimeout(resolve, 1000))  // ✅ 1초 타임아웃
+                        ]);
                     });
                     
                     await Promise.all(imagePromises);
 
-                    // 3. 브라우저 페인팅 사이클 대기
-                    // 리소스가 준비되어도 브라우저가 화면에 실제로 그리는 시간이 필요합니다.
-                    // Double requestAnimationFrame은 레이아웃 계산과 실제 페인트를 보장하는 트릭입니다.
+                    // 3. ✅ KaTeX/MathJax 렌더링 완료 대기
+                    try {
+                        // KaTeX 렌더링 완료 감지
+                        const hasKaTeX = document.querySelectorAll('.katex').length > 0;
+                        if (hasKaTeX) {
+                            console.log(`[KaTeX] Found ${document.querySelectorAll('.katex').length} KaTeX elements`);
+                            // KaTeX 렌더링 완료 감지: DOM 안정화 확인
+                            await new Promise((resolve) => {
+                                let isStable = false;
+                                let checkCount = 0;
+                                const maxChecks = 10;  // 최대 10번 확인 (5초)
+                                
+                                const checkKaTeXReady = () => {
+                                    checkCount++;
+                                    const currentKaTeXCount = document.querySelectorAll('.katex').length;
+                                    console.log(`[KaTeX] Check ${checkCount}: ${currentKaTeXCount} elements`);
+                                    
+                                    // 이전 확인과 KaTeX 개수가 같으면 안정화됨
+                                    if (isStable || checkCount >= maxChecks) {
+                                        console.log(`[KaTeX] Rendering stable at check ${checkCount}`);
+                                        resolve();
+                                    } else {
+                                        if (checkCount > 1 && currentKaTeXCount === 
+                                            (window._previousKaTeXCount || 0)) {
+                                            isStable = true;
+                                            console.log(`[KaTeX] Rendering complete`);
+                                            resolve();
+                                        }
+                                        window._previousKaTeXCount = currentKaTeXCount;
+                                        setTimeout(checkKaTeXReady, 500);  // 500ms 간격 확인
+                                    }
+                                };
+                                
+                                checkKaTeXReady();
+                            });
+                        }
+                        
+                        // MathJax 렌더링 완료 감지
+                        if (window.MathJax && window.MathJax.typesetPromise) {
+                            console.log(`[MathJax] Found, waiting for typeset...`);
+                            try {
+                                await Promise.race([
+                                    window.MathJax.typesetPromise(),
+                                    new Promise(resolve => setTimeout(resolve, 3000))  // 3초 타임아웃
+                                ]);
+                                console.log(`[MathJax] Typeset complete`);
+                            } catch (err) {
+                                console.warn(`MathJax typeset error: ${err.message}`);
+                            }
+                        }
+                    } catch (err) {
+                        console.warn(`KaTeX/MathJax check failed: ${err.message}`);
+                    }
+
+                    // 4. 브라우저 페인팅 사이클 대기
                     return new Promise(resolve => {
                         requestAnimationFrame(() => {
                         requestAnimationFrame(() => {
@@ -875,11 +1058,80 @@ class PdfService {
                         padding-left: ${padLeft}px !important; 
                         padding-right: ${padRight}px !important;
                     }
+                    
+                    /* ✅ KaTeX 렌더링 개선 */
+                    .katex {
+                        display: inline-block;
+                        white-space: nowrap;
+                        font-size: 1em;
+                        font-feature-settings: "kern" 1;
+                        -webkit-font-smoothing: antialiased;
+                        -moz-osx-font-smoothing: grayscale;
+                    }
+                    
+                    .katex-display {
+                        display: block;
+                        margin: 0.5em 0 !important;
+                        padding: 0 !important;
+                        text-align: center;
+                        overflow-x: auto;
+                        overflow-y: hidden;
+                    }
+                    
+                    .katex-html {
+                        display: inline-block;
+                        width: auto;
+                        color: inherit;
+                    }
+                    
                     .katex-mathml,
                     .katex-display .katex-mathml,
                     .katex > .katex-mathml,
                     .annotation {
                         display: none !important;
+                    }
+                    
+                    /* ✅ KaTeX base 요소 명시 */
+                    .katex.katex-display::after {
+                        content: "";
+                    }
+                    
+                    /* ✅ 모든 KaTeX 자식 요소 스타일 보존 */
+                    .katex * {
+                        border: 0;
+                        margin: 0;
+                        padding: 0;
+                        position: relative;
+                    }
+                    
+                    .katex .base {
+                        position: relative;
+                        display: inline-block;
+                        white-space: nowrap;
+                        width: min-content;
+                    }
+                    
+                    .katex .strut {
+                        display: inline-block;
+                        zoom: 1;
+                        height: 0;
+                        width: 0;
+                    }
+                    
+                    .katex .sizing, 
+                    .katex .fontsize-multiplier {
+                        display: inline-block;
+                    }
+                    
+                    .katex .mord, .katex .mop, .katex .mbin, .katex .mrel, 
+                    .katex .mopen, .katex .mclose, .katex .mpunct, .katex .minner {
+                        position: relative;
+                        display: inline-block;
+                    }
+                    
+                    /* KaTeX HTML은 반드시 표시 */
+                    .katex-html {
+                        display: inline-block;
                     } 
                 `;
 
@@ -903,7 +1155,26 @@ class PdfService {
                 });
 
                 window.dispatchEvent(new Event('resize'));
-                await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 3000)));
+                
+                // ✅ 페이지 복잡도에 따른 동적 대기 시간
+                const elementCount = document.querySelectorAll('*').length;
+                const hasKaTeX = document.querySelectorAll('.katex').length > 0;  // ✅ KaTeX 감지
+                const hasMathJax = !!window.MathJax;  // ✅ MathJax 감지
+                
+                let waitTime = 2000;  // 기본값 2초
+                
+                // KaTeX/MathJax가 있으면 최소 2.5초 이상 대기
+                if (hasKaTeX || hasMathJax) {
+                    waitTime = Math.max(2500, waitTime);
+                    console.log(`KaTeX/MathJax detected, increasing wait time to ${waitTime}ms`);
+                }
+                
+                // 페이지 복잡도에 따른 추가 조정
+                if (elementCount > 5000) waitTime = Math.max(3000, waitTime);      // 복잡: 3초 이상
+                else if (elementCount > 1000) waitTime = Math.max(2500, waitTime); // 중간: 2.5초 이상
+                else waitTime = Math.max(1500, waitTime);                          // 간단: 1.5초 이상
+                
+                await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, waitTime)));
 
                 // F. 최종 높이 재계산
                 const selectors = ['.notion-page-content', '.layout'];
@@ -930,6 +1201,49 @@ class PdfService {
             }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
 
             logger.info(`Calculated scale: ${dimensions.scale}`);
+
+            // ✅ PDF 생성 전 최종 KaTeX 렌더링 검증
+            const katexStatus = await page.evaluate(() => {
+                const katexElements = document.querySelectorAll('.katex');
+                const katexCount = katexElements.length;
+                
+                if (katexCount === 0) {
+                    return { count: 0, status: 'no-katex', hasCSS: !!document.querySelector('link[href*="katex"]') };
+                }
+                
+                // 첫 번째 KaTeX 요소 검증
+                const firstKatex = katexElements[0];
+                const computedStyle = window.getComputedStyle(firstKatex);
+                const fontFamily = computedStyle.fontFamily;
+                
+                console.log(`[KaTeX Validation] Count: ${katexCount}, Font: ${fontFamily}`);
+                
+                // ✅ CSS 로드 확인 (유효한 선택자만 사용)
+                const hasKaTeXLink = !!document.querySelector('link[href*="katex"]');
+                const hasKaTeXStyleTag = !!document.querySelector('style[data-katex]');
+                // style 태그의 textContent 검사
+                const hasKaTeXInlineStyle = Array.from(document.querySelectorAll('style')).some(style => 
+                    style.textContent && style.textContent.includes('.katex')
+                );
+                const cssLoaded = hasKaTeXLink || hasKaTeXStyleTag || hasKaTeXInlineStyle;
+                
+                return {
+                    count: katexCount,
+                    status: 'rendered',
+                    fontFamily: fontFamily,
+                    hasHTML: !!firstKatex.querySelector('.katex-html'),
+                    cssLoaded: cssLoaded,
+                    debugCSS: { hasKaTeXLink, hasKaTeXStyleTag, hasKaTeXInlineStyle }
+                };
+            });
+            
+            logger.info(`KaTeX Pre-PDF Status: ${JSON.stringify(katexStatus)}`);
+            
+            if (katexStatus.count > 0 && katexStatus.fontFamily) {
+                logger.info(`✅ KaTeX fonts appear to be loaded: ${katexStatus.fontFamily}`);
+            } else if (katexStatus.count > 0 && !katexStatus.fontFamily) {
+                logger.warn(`⚠️ KaTeX elements found but fonts may not be loaded properly`);
+            }
 
             // 2. 계산된 높이와 너비로 뷰포트 최종 조정
             const finalHeight = Math.ceil(dimensions.height);
@@ -997,13 +1311,31 @@ class PdfService {
                 preferCSSPageSize: false,
                 tagged: true,
                 outline: true,
+                omitBackground: false  // ✅ 배경색/이미지 포함
             });
+
+            logger.info(`PDF generated - Width: ${pdfWidth}px, Height: ${pdfHeight}px, Scale: ${scale}`);
 
             const nodeStream = Readable.fromWeb(pdfWebStream);
 
+            // ✅ 스트림 종료 시 명시적 메모리 정리
             nodeStream.on('close', async () => {
-                if (page) await page.close();
-                await browserPool.release(browser);
+                try {
+                    await this._cleanupPageResources(page);
+                    await browserPool.release(browser);
+                } catch (err) {
+                    logger.warn(`Error during stream close cleanup: ${err.message}`);
+                }
+            });
+
+            nodeStream.on('error', async (err) => {
+                logger.error(`PDF stream error: ${err.message}`);
+                try {
+                    await this._cleanupPageResources(page);
+                    await browserPool.release(browser);
+                } catch (cleanupErr) {
+                    logger.warn(`Error during stream error cleanup: ${cleanupErr.message}`);
+                }
             });
 
             return {
@@ -1013,16 +1345,55 @@ class PdfService {
 
         } catch (error) {
             logger.error(`PDF Generation failed: ${error.message}`);
-            if (page) await page.close();
-            await browserPool.release(browser);
+            
+            // ✅ 에러 발생 시에도 명시적 정리
+            try {
+                await this._cleanupPageResources(page);
+                await browserPool.release(browser);
+            } catch (cleanupErr) {
+                logger.warn(`Error during exception cleanup: ${cleanupErr.message}`);
+            }
+            
             throw error;
         }
     }
 
+    // ✅ 새 메서드: 페이지 리소스 명시적 정리
+    async _cleanupPageResources(page) {
+        if (!page) return;
+
+        try {
+            // 1. 모든 이벤트 리스너 제거
+            page.removeAllListeners();
+            
+            // 2. 페이지 컨텍스트 초기화 (가능한 범위 내)
+            try {
+                await page.evaluate(() => {
+                    // 전역 변수 정리
+                    window._resources = null;
+                    window._assets = null;
+                    // DOM 내용 정리
+                    document.body.innerHTML = '';
+                });
+            } catch (evalErr) {
+                logger.debug(`Page evaluation cleanup skipped: ${evalErr.message}`);
+            }
+            
+            // 3. 페이지 종료
+            await page.close();
+            
+        } catch (err) {
+            logger.warn(`Page cleanup error: ${err.message}`);
+        }
+    }
 
     async close() {
-        await browserPool.drain();
-        await browserPool.clear();
+        try {
+            await browserPool.drain();
+            await browserPool.clear();
+        } catch (err) {
+            logger.warn(`Error during service close: ${err.message}`);
+        }
     }
 }
 
