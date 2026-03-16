@@ -149,7 +149,60 @@ class PdfService {
                     console.warn(`Preview KaTeX/MathJax check failed: ${err.message}`);
                 }
                 
-                // 5. 추가 지연 (CSS 애니메이션 + 렌더링 완료)
+                // 5. ✅ 노션 토글 블록 모두 열기 및 렌더링 대기
+                console.log('[Preview-Toggle] Starting to open all toggles...');
+                try {
+                    let allToggleClosed = false;
+                    let iterationCount = 0;
+                    const maxIterations = 20; // 무한 루프 방지
+                    
+                    // 중첩된 토글까지 모두 처리하기 위해 반복 실행
+                    while (!allToggleClosed && iterationCount < maxIterations) {
+                        iterationCount++;
+                        console.log(`[Preview-Toggle] Iteration ${iterationCount}: Checking for closed toggles...`);
+                        
+                        const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
+                        const closedToggles = Array.from(toggleButtons).filter(btn => 
+                            btn.getAttribute('aria-expanded') === 'false'
+                        );
+                        
+                        console.log(`[Preview-Toggle] Iteration ${iterationCount}: Found ${closedToggles.length} closed toggles`);
+                        
+                        if (closedToggles.length === 0) {
+                            allToggleClosed = true;
+                            console.log('[Preview-Toggle] All toggles are now open');
+                        } else {
+                            // 모든 닫힌 토글 클릭
+                            closedToggles.forEach(button => {
+                                button.click();
+                            });
+                            
+                            // 렌더링 대기 (새로운 토글이 DOM에 추가될 시간 제공)
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            
+                            // requestAnimationFrame로 레이아웃 계산 완료 대기
+                            await new Promise(resolve => {
+                                requestAnimationFrame(() => {
+                                    requestAnimationFrame(() => {
+                                        resolve();
+                                    });
+                                });
+                            });
+                        }
+                    }
+                    
+                    if (iterationCount >= maxIterations) {
+                        console.warn('[Preview-Toggle] Max iterations reached, some toggles may still be closed');
+                    }
+                    
+                    // 최종 안정화 대기
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log('[Preview-Toggle] Toggle processing completed');
+                } catch (err) {
+                    console.warn(`[Preview-Toggle] Error opening toggles: ${err.message}`);
+                }
+                
+                // 6. 추가 지연 (CSS 애니메이션 + 렌더링 완료)
                 await new Promise(resolve => setTimeout(resolve, 2000));
             });
 
@@ -929,12 +982,12 @@ class PdfService {
             }
 
             // 2. 계산된 높이와 너비로 뷰포트 최종 조정
-            const finalHeight = Math.ceil(dimensions.height);
+            const finalHeight = Math.ceil(dimensions.height) + 100;
             const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
             
             await page.setViewport({ width: finalWidth + 1000, height: finalHeight });
             
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 5000));
 
             const scale = dimensions.scale;
             const pdfWidth = finalWidth * scale;
