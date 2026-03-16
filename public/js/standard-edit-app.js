@@ -410,11 +410,61 @@ class StandardEditApp {
         });
     }
 
+    setupToggleInteraction() {
+        /**
+         * 토글 버튼 클릭 상호작용 설정
+         * - 토글 버튼을 클릭하면 펼침/접음 상태 변경
+         * - 블록 클릭(페이지 분할) 이벤트와 구분
+         */
+        if (!this.contentArea) {
+            return;
+        }
+
+        const toggleButtons = this.contentArea.querySelectorAll('.notion-toggle-block [role="button"]');
+        Logger.log(`setupToggleInteraction: Found ${toggleButtons.length} toggle buttons`, 'info');
+
+        toggleButtons.forEach((button) => {
+            button.addEventListener('click', (e) => {
+                // 이벤트 전파 중지 (부모 블록의 클릭 이벤트 방지)
+                e.stopPropagation();
+                e.preventDefault();
+
+                // aria-expanded 상태 토글 (true <-> false)
+                const isExpanded = button.getAttribute('aria-expanded') === 'true';
+                const newState = !isExpanded;
+                button.setAttribute('aria-expanded', newState);
+
+                // aria-label 업데이트 (접기 <-> 열기)
+                button.setAttribute('aria-label', newState ? '닫기' : '열기');
+
+                // SVG 회전 애니메이션 업데이트
+                const svg = button.querySelector('svg');
+                if (svg) {
+                    // transform: rotateZ는 CSS에서 설정되므로 여기서는 상태만 변경
+                    svg.style.transform = newState ? 'rotateZ(0deg)' : 'rotateZ(-90deg)';
+                }
+
+                // aria-controls로 지정된 요소 표시/숨김 토글
+                const controlsId = button.getAttribute('aria-controls');
+                if (controlsId) {
+                    const controlledElement = document.getElementById(controlsId);
+                    if (controlledElement) {
+                        controlledElement.style.display = newState ? 'flex' : 'none';
+                        Logger.log(`Toggle [${controlsId}]: ${newState ? 'expanded' : 'collapsed'}`, 'debug');
+                    }
+                }
+            });
+        });
+    }
+
     setupInteraction() {
         if (!this.contentArea) {
             Logger.warn('setupInteraction: #content-area not found');
             return;
         }
+
+        // 1. 토글 버튼 상호작용 먼저 설정
+        this.setupToggleInteraction();
 
         const blocks = this.contentArea.children;
         Logger.log(`setupInteraction: Found ${blocks.length} blocks`, 'info');
@@ -439,6 +489,12 @@ class StandardEditApp {
             });
 
             block.addEventListener('click', (e) => {
+                // 2. 토글 버튼이 클릭된 경우 페이지 분할 이벤트 무시
+                const toggleButton = e.target.closest('.notion-toggle-block [role="button"]');
+                if (toggleButton) {
+                    return; // 토글 클릭은 setupToggleInteraction에서 처리됨
+                }
+
                 if (this.format === 'SINGLE') return;
                 e.preventDefault();
                 e.stopPropagation();
