@@ -700,6 +700,73 @@ class PdfService {
 
             await page.goto(url, { waitUntil: 'networkidle0' });
 
+            // ✅ 노션 토글 블록 모두 펼치기 (미리보기와 동일)
+            logger.info('[PDF-Toggle] Starting to open all toggles...');
+            try {
+                let allToggleClosed = false;
+                let iterationCount = 0;
+                const maxIterations = 20; // 무한 루프 방지
+                
+                // 중첩된 토글까지 모두 처리하기 위해 반복 실행
+                while (!allToggleClosed && iterationCount < maxIterations) {
+                    iterationCount++;
+                    
+                    const toggleInfo = await page.evaluate(() => {
+                        const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
+                        const closedToggles = Array.from(toggleButtons).filter(btn => 
+                            btn.getAttribute('aria-expanded') === 'false'
+                        );
+                        
+                        return {
+                            totalCount: toggleButtons.length,
+                            closedCount: closedToggles.length
+                        };
+                    });
+                    
+                    logger.debug(`[PDF-Toggle] Iteration ${iterationCount}: Total=${toggleInfo.totalCount}, Closed=${toggleInfo.closedCount}`);
+                    
+                    if (toggleInfo.closedCount === 0) {
+                        allToggleClosed = true;
+                        logger.info('[PDF-Toggle] All toggles are now open');
+                    } else {
+                        // 모든 닫힌 토글 클릭
+                        await page.evaluate(() => {
+                            const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
+                            const closedToggles = Array.from(toggleButtons).filter(btn => 
+                                btn.getAttribute('aria-expanded') === 'false'
+                            );
+                            closedToggles.forEach(button => {
+                                button.click();
+                            });
+                        });
+                        
+                        // 렌더링 대기
+                        await page.waitForTimeout(500);
+                        
+                        // requestAnimationFrame 대기 (레이아웃 계산 완료)
+                        await page.evaluate(() => {
+                            return new Promise(resolve => {
+                                requestAnimationFrame(() => {
+                                    requestAnimationFrame(() => {
+                                        resolve();
+                                    });
+                                });
+                            });
+                        });
+                    }
+                }
+                
+                if (iterationCount >= maxIterations) {
+                    logger.warn('[PDF-Toggle] Max iterations reached, some toggles may still be closed');
+                }
+                
+                // 최종 안정화 대기
+                await page.waitForTimeout(1000);
+                logger.info('[PDF-Toggle] Toggle processing completed');
+            } catch (err) {
+                logger.warn(`[PDF-Toggle] Error opening toggles: ${err.message}`);
+            }
+
             // ✅ KaTeX CSS를 페이지에 명시적으로 주입 (PDF 렌더링 개선)
             logger.info('Injecting KaTeX CSS for PDF rendering...');
             try {

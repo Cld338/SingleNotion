@@ -415,46 +415,65 @@ class StandardEditApp {
          * 토글 버튼 클릭 상호작용 설정
          * - 토글 버튼을 클릭하면 펼침/접음 상태 변경
          * - 블록 클릭(페이지 분할) 이벤트와 구분
+         * - 토글 상태가 PDF에도 반영됨
          */
         if (!this.contentArea) {
             return;
         }
 
-        const toggleButtons = this.contentArea.querySelectorAll('.notion-toggle-block [role="button"]');
-        Logger.log(`setupToggleInteraction: Found ${toggleButtons.length} toggle buttons`, 'info');
+        // 이벤트 위임(Event Delegation) 방식 사용
+        // 현재와 미래에 추가될 토글 버튼 모두 처리
+        this.contentArea.addEventListener('click', (e) => {
+            const button = e.target.closest('.notion-toggle-block [role="button"]');
+            if (!button) return;
 
-        toggleButtons.forEach((button) => {
-            button.addEventListener('click', (e) => {
-                // 이벤트 전파 중지 (부모 블록의 클릭 이벤트 방지)
-                e.stopPropagation();
-                e.preventDefault();
+            // 이벤트 전파 중지 (부모 블록의 클릭 이벤트 방지)
+            e.stopPropagation();
+            e.preventDefault();
 
-                // aria-expanded 상태 토글 (true <-> false)
-                const isExpanded = button.getAttribute('aria-expanded') === 'true';
-                const newState = !isExpanded;
-                button.setAttribute('aria-expanded', newState);
+            // aria-expanded 상태 토글 (true <-> false)
+            const isExpanded = button.getAttribute('aria-expanded') === 'true';
+            const newState = !isExpanded;
+            button.setAttribute('aria-expanded', newState);
 
-                // aria-label 업데이트 (접기 <-> 열기)
-                button.setAttribute('aria-label', newState ? '닫기' : '열기');
+            // aria-label 업데이트 (접기 <-> 열기)
+            button.setAttribute('aria-label', newState ? '닫기' : '열기');
 
-                // SVG 회전 애니메이션 업데이트
-                const svg = button.querySelector('svg');
-                if (svg) {
-                    // transform: rotateZ는 CSS에서 설정되므로 여기서는 상태만 변경
-                    svg.style.transform = newState ? 'rotateZ(0deg)' : 'rotateZ(-90deg)';
-                }
+            // SVG 회전 애니메이션 업데이트
+            const svg = button.querySelector('svg');
+            if (svg) {
+                svg.style.transform = newState ? 'rotateZ(0deg)' : 'rotateZ(-90deg)';
+            }
 
-                // aria-controls로 지정된 요소 표시/숨김 토글
-                const controlsId = button.getAttribute('aria-controls');
-                if (controlsId) {
-                    const controlledElement = document.getElementById(controlsId);
-                    if (controlledElement) {
-                        controlledElement.style.display = newState ? 'flex' : 'none';
-                        Logger.log(`Toggle [${controlsId}]: ${newState ? 'expanded' : 'collapsed'}`, 'debug');
+            // aria-controls로 지정된 요소 표시/숨김 토글
+            const controlsId = button.getAttribute('aria-controls');
+            if (controlsId) {
+                const controlledElement = document.getElementById(controlsId);
+                if (controlledElement) {
+                    // 1. 토글 상태 저장 (data 속성에 원래 display 값 저장)
+                    if (!button.dataset.originalDisplay) {
+                        const computedDisplay = window.getComputedStyle(controlledElement).display;
+                        button.dataset.originalDisplay = computedDisplay || 'flex';
                     }
+
+                    // 2. display 상태 업데이트
+                    const originalDisplay = button.dataset.originalDisplay;
+                    controlledElement.style.display = newState ? originalDisplay : 'none';
+
+                    Logger.log(
+                        `Toggle [${controlsId}]: ${newState ? 'expanded' : 'collapsed'} (display: ${controlledElement.style.display})`,
+                        'debug'
+                    );
+
+                    // 3. 점차적인 너비 변경으로 인한 레이아웃 재계산 강제
+                    this.contentArea.style.display = 'none';
+                    void this.contentArea.offsetHeight; // 리플로우 강제 트리거
+                    this.contentArea.style.display = 'block';
                 }
-            });
-        });
+            }
+        }, true); // 캡처 단계에서 처리하여 더 빨리 반응
+
+        Logger.log('setupToggleInteraction: Event delegation setup complete', 'info');
     }
 
     setupInteraction() {
