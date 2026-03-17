@@ -218,7 +218,7 @@ class PdfService {
             
                 
                 const contentEl = document.querySelector('.notion-page-content');
-                const width = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
+                const width = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) : 1080;
                 
                 // --- [수정된 부분] 옵션에 따라 HTML 블록들을 추출하여 병합 ---
                 let htmlParts = [];
