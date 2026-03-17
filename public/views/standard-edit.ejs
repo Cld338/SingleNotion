@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/styles.260313.css">
     <link rel="stylesheet" href="/css/standard-edit.260313.css">
+    <link rel="stylesheet" href="/css/mobile.260313.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
     <%- include('partials/analytics-head') %>
@@ -18,10 +19,13 @@
 
     
     <nav class="navbar" style="position: relative; z-index: 100; border-bottom: 1px solid rgba(226, 232, 240, 0.8);">
-        <div class="nav-container" style="max-width: 100%; padding: 0 2rem;">
+        <div class="nav-container" style="max-width: 100%; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <a href="#" class="logo">
                 <img src="/images/favicon.ico" alt="Single Notion Logo" style="width: 30px; height: 30px; margin-right: -5px; vertical-align: middle;"> Single Notion
             </a>
+            <button class="sidebar-toggle-btn" id="sidebar-toggle" style="display: none;" aria-label="메뉴 열기">
+                <i class="fa-solid fa-bars"></i>
+            </button>
         </div>
     </nav>
 
@@ -32,6 +36,9 @@
                 <p class="loading-text" style="margin-left: 15px;">Notion 문서를 불러오는 중...</p>
             </div>
         </div>
+        
+        <div id="sidebar-overlay" class="sidebar-overlay" id="sidebar-overlay"></div>
+
         <div id="notion-viewer">
             <div id="content-area" style="display: none;">
             </div>

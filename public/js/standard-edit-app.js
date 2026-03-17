@@ -566,6 +566,9 @@ class StandardEditApp {
     }
 
     setupEventListeners() {
+        // Mobile Sidebar Toggle
+        this.setupMobileSidebarToggle();
+
         this.generateBtn.addEventListener('click', () => this.onGenerateClick());
         window.addEventListener('resize', () => this.updatePageBreakPreview());
 
@@ -601,6 +604,56 @@ class StandardEditApp {
             const el = document.getElementById(id);
             if (el) {
                 el.addEventListener('change', () => this.updateVisibility());
+            }
+        });
+    }
+
+    setupMobileSidebarToggle() {
+        const toggleBtn = document.getElementById('sidebar-toggle');
+        const sidebar = document.querySelector('.sidebar');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+        if (!toggleBtn || !sidebar) return;
+
+        const openSidebar = () => {
+            sidebar.classList.add('active');
+            sidebarOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        };
+
+        const closeSidebar = () => {
+            sidebar.classList.remove('active');
+            sidebarOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+        };
+
+        // Toggle button click
+        toggleBtn.addEventListener('click', () => {
+            if (sidebar.classList.contains('active')) {
+                closeSidebar();
+            } else {
+                openSidebar();
+            }
+        });
+
+        // Overlay click to close
+        sidebarOverlay.addEventListener('click', () => {
+            closeSidebar();
+        });
+
+        // Close sidebar when a setting changes (optional, for UX)
+        const sidebarInputs = sidebar.querySelectorAll('input, select, button:not(.sidebar-toggle-btn)');
+        sidebarInputs.forEach(input => {
+            if (input.id === 'generate-btn') {
+                // Keep sidebar open for generate button
+                return;
+            }
+        });
+
+        // Close sidebar on window resize to desktop
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 767) {
+                closeSidebar();
             }
         });
     }
@@ -663,6 +716,7 @@ class StandardEditApp {
 
     async onGenerateClick() {
         try {
+            document.body.classList.add('pdf-generating');
             this.generateBtn.disabled = true;
             this.loadingOverlay.style.display = 'flex';
             
@@ -712,6 +766,8 @@ class StandardEditApp {
             alert('PDF 생성에 실패했습니다: ' + err.message);
             this.generateBtn.disabled = false;
             this.loadingOverlay.style.display = 'none';
+        } finally {
+            document.body.classList.remove('pdf-generating');
         }
     }
 

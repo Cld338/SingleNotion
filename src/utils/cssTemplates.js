@@ -70,7 +70,7 @@ class CSSTemplates {
             
             /* ✅ 모든 KaTeX 자식 요소 스타일 보존 */
             .katex * {
-                border: 0;
+                border: 0 !important;
                 margin: 0;
                 padding: 0;
                 position: relative;
@@ -146,6 +146,22 @@ class CSSTemplates {
             
             ::-webkit-scrollbar { 
                 display: none !important; 
+            }
+
+            /* ✅ PDF 렌더링 시 SVG 및 콘텐츠 요소의 불필요한 border 제거 */
+            svg, svg * {
+                border: 0 !important;
+            }
+            
+            .notion-page-content svg,
+            .notion-page-content svg * {
+                border: 0 !important;
+            }
+            
+            /* 콘텐츠 영역 기본 요소 border 리셋 */
+            #content-area svg,
+            #content-area svg * {
+                border: 0 !important;
             }
         `;
     }
