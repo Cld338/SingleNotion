@@ -203,6 +203,7 @@ class URLPathConverter {
      * 외부 URL을 proxy-asset으로 변환합니다
      * (data: URI와 이미 /proxy-asset인 것은 제외)
      * 상대 경로는 baseOrigin을 사용해 절대 경로로 변환한 후 proxy-asset으로 변환
+     * ⭐ 앵커 링크(#이 포함된 링크)는 proxy-asset 변환 제외 (목차 같은 페이지 내 링크에 사용)
      * @param {string} url - URL
      * @param {string} baseOrigin - 기본 origin (상대 경로 처리용)
      * @returns {string} proxy-asset 형태의 URL 또는 원본 URL
@@ -212,6 +213,12 @@ class URLPathConverter {
         
         // 이미 proxy-asset이거나 data URI인 경우 그대로 반환
         if (url.includes('/proxy-asset') || url.startsWith('data:')) {
+            return url;
+        }
+        
+        // ⭐ 앵커 링크가 포함된 경우 proxy-asset으로 변환하지 않음
+        // (예: /page?pvs=25#section-id 형태의 같은 페이지 내 목차 링크)
+        if (url.includes('#')) {
             return url;
         }
         
@@ -229,6 +236,31 @@ class URLPathConverter {
         }
         
         // 상대 경로인데 baseOrigin이 없으면 그대로 반환 (나중에 처리될 것으로 예상)
+        return url;
+    }
+
+    /**
+     * 페이지 URL이 포함된 앵커 링크를 단순 앵커 링크로 변환합니다
+     * 예: /page-url?pvs=25#section-id → #section-id
+     * PDF 내에서 앵커 링크가 제대로 작동하도록 변환
+     * @param {string} url - URL
+     * @returns {string} 변환된 URL
+     */
+    static simplifyAnchorLink(url) {
+        if (!url || !url.includes('#')) {
+            return url;
+        }
+        
+        // 앵커 부분 추출
+        const anchorIndex = url.indexOf('#');
+        const anchor = url.substring(anchorIndex);
+        
+        // notion-table_of_contents-block 하의 링크 등 페이지 내 이동 링크인 경우 단순화
+        // 예: /page-url?pvs=25#id → #id
+        if (anchorIndex > 0) {
+            return anchor;
+        }
+        
         return url;
     }
 
@@ -251,7 +283,10 @@ class URLPathConverter {
                     .replace(/&apos;/g, "'")
                     .replace(/&quot;/g, '"');
                 
-                const proxiedUrl = URLPathConverter.convertToProxyAsset(decodedUrl, baseOrigin);
+                // ⭐ 앵커 링크는 단순화 처리 (PDF 내 이동 가능하도록)
+                let processedUrl = URLPathConverter.simplifyAnchorLink(decodedUrl);
+                
+                const proxiedUrl = URLPathConverter.convertToProxyAsset(processedUrl, baseOrigin);
                 return match.replace(url, proxiedUrl);
             }
         );
