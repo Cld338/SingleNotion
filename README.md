@@ -23,7 +23,7 @@ cd SingleNotion
 docker-compose up -d --build
 
 # 3. 접속
-http://localhost:3000
+https://notion-pdf.cld338.me
 ```
 
 

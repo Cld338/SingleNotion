@@ -179,18 +179,30 @@ const Utils = {
                 try {
                     const link = document.createElement('link');
                     link.rel = 'stylesheet';
-                    link.href = css.href;
-                    if (css.media) {
-                        link.media = css.media;
+                    
+                    // 문자열 (extension)과 객체 형식 모두 지원
+                    const cssUrl = typeof css === 'string' ? css : css.href;
+                    const cssMedia = typeof css === 'string' ? undefined : css.media;
+                    
+                    if (!cssUrl) {
+                        Logger.warn(`CSS [${index + 1}/${cssLinks.length}] Missing URL`);
+                        failureCount++;
+                        resolve();
+                        return;
+                    }
+                    
+                    link.href = cssUrl;
+                    if (cssMedia) {
+                        link.media = cssMedia;
                     }
 
                     const onComplete = (success) => {
                         clearTimeout(timeoutId);
                         if (success) {
-                            Logger.success(`CSS [${index + 1}/${cssLinks.length}] Loaded: ${css.href.substring(0, 60)}...`);
+                            Logger.success(`CSS [${index + 1}/${cssLinks.length}] Loaded: ${cssUrl.substring(0, 60)}...`);
                             successCount++;
                         } else {
-                            Logger.warn(`CSS [${index + 1}/${cssLinks.length}] Failed: ${css.href.substring(0, 60)}...`);
+                            Logger.warn(`CSS [${index + 1}/${cssLinks.length}] Failed: ${cssUrl.substring(0, 60)}...`);
                             failureCount++;
                         }
                         resolve();
@@ -231,14 +243,27 @@ const Utils = {
         inlineStyles.forEach((style, index) => {
             try {
                 const styleEl = document.createElement('style');
-                if (style.id) {
-                    styleEl.id = style.id;
+                
+                // 문자열 (extension)과 객체 형식 모두 지원
+                const styleId = typeof style === 'string' ? undefined : style.id;
+                const styleContent = typeof style === 'string' ? style : style.content;
+                
+                if (!styleContent) {
+                    Logger.warn(`Inline style ${index + 1} is empty`);
+                    return;
                 }
-                styleEl.textContent = style.content;
+                
+                if (styleId) {
+                    styleEl.id = styleId;
+                }
+                styleEl.textContent = styleContent;
                 document.head.appendChild(styleEl);
-                Logger.success(`Inline style ${index + 1} added: ${style.id || 'unnamed'} (${style.content.length} bytes)`);
+                
+                const contentLength = typeof styleContent === 'string' ? styleContent.length : 0;
+                const idDisplay = styleId || 'unnamed';
+                Logger.success(`Inline style ${index + 1} added: ${idDisplay} (${contentLength} bytes)`);
             } catch (err) {
-                Logger.warn(`Error loading inline style: ${err.message}`);
+                Logger.warn(`Error loading inline style ${index + 1}: ${err.message}`);
             }
         });
     },

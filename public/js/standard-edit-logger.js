@@ -12,15 +12,16 @@ const Logger = (() => {
         debug: 'color: #8b5cf6',
         muted: 'color: #94a3b8; font-size: 11px'
     };
-    const isDev = false; // 개발 중일 때는 true, 배포 시에는 false
+    const isDev = true; // 개발 중일 때는 true, 배포 시에는 false - 현재 디버깅 모드
 
-    if (!isDev) {
-        console.log = () => {};
-        console.info = () => {};
-        console.warn = () => {};
-        console.error = () => {};
-        // error는 시스템 오류 확인을 위해 남겨두는 경우가 많습니다.
-    }
+    // Console 비활성화 해제 - 현재 로그 수집 중
+    // if (!isDev) {
+    //     console.log = () => {};
+    //     console.info = () => {};
+    //     console.warn = () => {};
+    //     console.error = () => {};
+    //     // error는 시스템 오류 확인을 위해 남겨두는 경우가 많습니다.
+    // }
 
     return {
         logSection(title, type = 'title') {
@@ -52,96 +53,126 @@ const Logger = (() => {
         logResources(resources) {
             if (!resources) return;
 
+            // Extension 형식 (단순 배열) vs 복잡한 형식 구분
+            const isSimpleFormat = Array.isArray(resources.cssLinks) && 
+                                   Array.isArray(resources.inlineStyles) &&
+                                   !resources.images;
+
             this.logSection('로드된 CSS 파일', 'title');
-            if (resources.cssLinks?.length) {
-                resources.cssLinks.forEach((css, idx) => {
-                    console.log(`[${idx + 1}] ${css.media ? `[${css.media}] ` : ''}${css.href}`);
-                });
+            if (resources.cssLinks && Array.isArray(resources.cssLinks) && resources.cssLinks.length) {
+                if (isSimpleFormat) {
+                    // Extension 형식: 단순 URL 문자열
+                    resources.cssLinks.forEach((css, idx) => {
+                        console.log(`[${idx + 1}] ${typeof css === 'string' ? css : css.href || 'N/A'}`);
+                    });
+                } else {
+                    // 복잡한 형식: 객체
+                    resources.cssLinks.forEach((css, idx) => {
+                        console.log(`[${idx + 1}] ${css.media ? `[${css.media}] ` : ''}${css.href || css}`);
+                    });
+                }
             } else {
                 console.log('CSS 파일 없음');
             }
 
             this.logSection('로드된 인라인 스타일', 'title');
-            if (resources.inlineStyles?.length) {
-                resources.inlineStyles.forEach((style, idx) => {
-                    console.log(`[${idx + 1}] ID: ${style.id || '(unnamed)'} | Size: ${style.content.length}B`);
-                });
+            if (resources.inlineStyles && Array.isArray(resources.inlineStyles) && resources.inlineStyles.length) {
+                if (isSimpleFormat) {
+                    // Extension 형식: 단순 스타일 텍스트
+                    resources.inlineStyles.forEach((style, idx) => {
+                        const length = typeof style === 'string' ? style.length : style.content?.length || 0;
+                        const preview = typeof style === 'string' ? 
+                            style.substring(0, 50).replace(/\n/g, ' ').trim() : 
+                            style.content?.substring(0, 50).replace(/\n/g, ' ').trim() || '(empty)';
+                        console.log(`[${idx + 1}] Size: ${length}B | Preview: ${preview}...`);
+                    });
+                } else {
+                    // 복잡한 형식: 객체
+                    resources.inlineStyles.forEach((style, idx) => {
+                        const length = style.content?.length || 0;
+                        const id = style.id || '(unnamed)';
+                        console.log(`[${idx + 1}] ID: ${id} | Size: ${length}B`);
+                    });
+                }
             } else {
                 console.log('인라인 스타일 없음');
             }
 
-            this.logSection('로드된 이미지', 'title');
-            if (resources.images?.length) {
-                resources.images.forEach((img, idx) => {
-                    console.log(`[${idx + 1}] ${img.src}${img.alt ? ` (alt: ${img.alt})` : ''}`);
-                });
-            } else {
-                console.log('이미지 없음');
-            }
-
-            this.logSection('로드된 아이콘', 'title');
-            if (resources.icons?.length) {
-                resources.icons.forEach((icon, idx) => {
-                    console.log(`[${idx + 1}] ${icon.rel}: ${icon.href}`);
-                });
-            } else {
-                console.log('아이콘 없음');
-            }
-
-            this.logSection('로드된 폰트', 'title');
-            if (resources.fonts?.length) {
-                resources.fonts.forEach((font, idx) => {
-                    console.log(`[${idx + 1}] ${font.href}`);
-                });
-            } else {
-                console.log('폰트 없음');
-            }
-
-            this.logSection('로드된 스크립트', 'title');
-            if (resources.scripts?.length) {
-                const external = resources.scripts.filter(s => s.type === 'external');
-                const inline = resources.scripts.filter(s => s.type === 'inline');
-
-                if (external.length) {
-                    console.log('외부 스크립트:');
-                    external.forEach((script, idx) => {
-                        console.log(`  [${idx + 1}] ${script.src}`);
+            // 복잡한 형식인 경우에만 다음 리소스 로그
+            if (!isSimpleFormat) {
+                this.logSection('로드된 이미지', 'title');
+                if (resources.images?.length) {
+                    resources.images.forEach((img, idx) => {
+                        console.log(`[${idx + 1}] ${img.src}${img.alt ? ` (alt: ${img.alt})` : ''}`);
                     });
+                } else {
+                    console.log('이미지 없음');
                 }
 
-                if (inline.length) {
-                    console.log(`인라인 스크립트: ${inline.length}개 (총 ${inline.reduce((s, sc) => s + sc.contentLength, 0)}B)`);
+                this.logSection('로드된 아이콘', 'title');
+                if (resources.icons?.length) {
+                    resources.icons.forEach((icon, idx) => {
+                        console.log(`[${idx + 1}] ${icon.rel}: ${icon.href}`);
+                    });
+                } else {
+                    console.log('아이콘 없음');
                 }
-            } else {
-                console.log('스크립트 없음');
-            }
 
-            this.logSection('로드된 KaTeX 리소스', 'title');
-            if (resources.katexResources?.length) {
-                resources.katexResources.forEach((katex, idx) => {
-                    const url = katex.src || katex.href;
-                    console.log(`[${idx + 1}] ${katex.type}: ${url}`);
-                });
-            } else {
-                console.log('KaTeX 리소스 없음');
-            }
+                this.logSection('로드된 폰트', 'title');
+                if (resources.fonts?.length) {
+                    resources.fonts.forEach((font, idx) => {
+                        console.log(`[${idx + 1}] ${font.href}`);
+                    });
+                } else {
+                    console.log('폰트 없음');
+                }
 
-            this.logSection('로드된 비디오/미디어', 'title');
-            if (resources.videos?.length) {
-                resources.videos.forEach((video, idx) => {
-                    console.log(`[${idx + 1}] <${video.tag}> ${video.src}${video.type ? ` (type: ${video.type})` : ''}`);
-                });
-            } else {
-                console.log('비디오/미디어 없음');
-            }
+                this.logSection('로드된 스크립트', 'title');
+                if (resources.scripts?.length) {
+                    const external = resources.scripts.filter(s => s.type === 'external');
+                    const inline = resources.scripts.filter(s => s.type === 'inline');
 
-            this.logSection('기타 Assets', 'title');
-            if (resources.otherAssets?.length) {
-                resources.otherAssets.forEach((asset, idx) => {
-                    console.log(`[${idx + 1}] <${asset.type}> ${asset.url}`);
-                });
-            } else {
-                console.log('기타 assets 없음');
+                    if (external.length) {
+                        console.log('외부 스크립트:');
+                        external.forEach((script, idx) => {
+                            console.log(`  [${idx + 1}] ${script.src}`);
+                        });
+                    }
+
+                    if (inline.length) {
+                        console.log(`인라인 스크립트: ${inline.length}개 (총 ${inline.reduce((s, sc) => s + (sc.contentLength || 0), 0)}B)`);
+                    }
+                } else {
+                    console.log('스크립트 없음');
+                }
+
+                this.logSection('로드된 KaTeX 리소스', 'title');
+                if (resources.katexResources?.length) {
+                    resources.katexResources.forEach((katex, idx) => {
+                        const url = katex.src || katex.href;
+                        console.log(`[${idx + 1}] ${katex.type}: ${url}`);
+                    });
+                } else {
+                    console.log('KaTeX 리소스 없음');
+                }
+
+                this.logSection('로드된 비디오/미디어', 'title');
+                if (resources.videos?.length) {
+                    resources.videos.forEach((video, idx) => {
+                        console.log(`[${idx + 1}] <${video.tag}> ${video.src}${video.type ? ` (type: ${video.type})` : ''}`);
+                    });
+                } else {
+                    console.log('비디오/미디어 없음');
+                }
+
+                this.logSection('기타 Assets', 'title');
+                if (resources.otherAssets?.length) {
+                    resources.otherAssets.forEach((asset, idx) => {
+                        console.log(`[${idx + 1}] <${asset.type}> ${asset.url}`);
+                    });
+                } else {
+                    console.log('기타 assets 없음');
+                }
             }
         },
 

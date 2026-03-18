@@ -2,40 +2,235 @@
  * Main Application Logic for Standard Edit Page
  */
 
+// 즉시 실행 - 가장 처음에 뭔가 기록하기
+(function() {
+    console.warn('⚡ standard-edit-app.js LOADED AT:', new Date().toISOString());
+    console.warn('⚡ URL:', window.location.href);
+    console.warn('⚡ sessionId query:', new URL(window.location).searchParams.get('sessionId'));
+    
+    // localStorage에도 저장
+    try {
+        let logs = JSON.parse(localStorage.getItem('editor-page-logs') || '[]');
+        logs.push(`[MARK] standard-edit-app loaded at ${new Date().toISOString()}`);
+        localStorage.setItem('editor-page-logs', JSON.stringify(logs));
+    } catch (e) {}
+})();
+
+// 파일 로드 확인
+console.warn('[standard-edit-app.js] File loaded!');
+console.warn('[standard-edit-app.js] URL:', window.location.href);
+
+// 즉시 전역 에러 핸들러 등록 (페이지 로드 시점)
+window.addEventListener('error', (event) => {
+    const msg = `Global Error: ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`;
+    console.error(msg);
+    console.error(event.error?.stack);
+    
+    // 서버로 전송
+    fetch(`${window.location.origin}/log-frontend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message: msg,
+            type: 'error',
+            data: {
+                filename: event.filename,
+                lineno: event.lineno,
+                colno: event.colno,
+                stack: event.error?.stack
+            },
+            source: 'global-error',
+            timestamp: new Date().toISOString(),
+            url: window.location.href
+        })
+    }).catch(e => console.warn('Failed to send error log to server'));
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    const msg = `Unhandled Promise Rejection: ${event.reason}`;
+    console.error(msg);
+    
+    // 서버로 전송
+    fetch(`${window.location.origin}/log-frontend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message: msg,
+            type: 'error',
+            data: {
+                reason: event.reason,
+                stack: event.reason?.stack
+            },
+            source: 'unhandled-rejection',
+            timestamp: new Date().toISOString(),
+            url: window.location.href
+        })
+    }).catch(e => console.warn('Failed to send rejection log to server'));
+});
+
+// 로그를 localStorage에 저장하고 서버로도 전송하는 디버깅 유틸
+class PageLogger {
+    static logs = [];
+    static SERVER_URL = window.location.origin; // 같은 서버에 요청
+    
+    static add(message, type = 'log') {
+        const entry = `[${type.toUpperCase()}] ${new Date().toISOString()} - ${message}`;
+        this.logs.push(entry);
+        
+        // Console 에러 무시 가능성 있으니 항상 localStorage에 저장
+        try {
+            let stored = JSON.parse(localStorage.getItem('editor-page-logs') || '[]');
+            stored.push(entry);
+            // 최대 100개만 유지
+            if (stored.length > 100) stored = stored.slice(-100);
+            localStorage.setItem('editor-page-logs', JSON.stringify(stored));
+        } catch (e) {
+            // localStorage 실패 시 배열에만 유지
+        }
+        
+        // Console 로그는 별도로 (Logger.js에서 비활성화되어도 상관없음)
+        try {
+            console.log(entry);
+        } catch (e) {}
+        
+        // 서버로 전송 (비동기, 에러 무시)
+        this.sendToServer(message, type);
+    }
+    
+    static sendToServer(message, type = 'log', data = null) {
+        // 비동기로 체크, 에러 발생해도 무시
+        fetch(`${this.SERVER_URL}/log-frontend`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message,
+                type,
+                data,
+                source: 'standard-edit-app',
+                timestamp: new Date().toISOString(),
+                url: window.location.href,
+                userAgent: navigator.userAgent
+            })
+        }).catch(e => {
+            // 서버 로그 전송 실패는 조용히 처리
+            try {
+                console.warn('[PageLogger] Failed to send log to server:', e);
+            } catch (e) {}
+        });
+    }
+    
+    static error(message, data = null) {
+        this.add(message, 'error');
+        if (data) {
+            try {
+                console.error('[APP ERROR DATA]', data);
+            } catch (e) {}
+            this.sendToServer(JSON.stringify(data), 'error', { stack: data?.stack });
+        }
+    }
+    
+    static log(message) {
+        this.add(message, 'log');
+    }
+    
+    static debug(message) {
+        this.add(message, 'debug');
+    }
+}
+
+PageLogger.log('=== PAGE LOADED - Initializing StandardEditApp ===');
+
 class StandardEditApp {
     constructor() {
-        // URL Parameters
-        const params = new URLSearchParams(window.location.search);
-        this.notionUrl = params.get('url');
-        this.format = params.get('format') || 'SINGLE';
-        this.mode = params.get('mode') || 'standard';
-        
-        // 추가: 제목, 배너, 속성 포함 여부 옵션
-        this.includeTitle = params.get('includeTitle') === 'true';
-        this.includeBanner = params.get('includeBanner') === 'true';
-        this.includeTags = params.get('includeTags') === 'true';
+        try {
+            PageLogger.log('constructor() started');
+            
+            // URL Parameters
+            PageLogger.debug('Reading URL parameters...');
+            PageLogger.debug(`window.location.href: ${window.location.href}`);
+            PageLogger.debug(`window.location.search: ${window.location.search}`);
+            
+            const params = new URLSearchParams(window.location.search);
+            this.notionUrl = params.get('url');
+            this.sessionId = params.get('sessionId'); // Chrome Extension에서 전송
+            this.source = params.get('source') || 'url'; // 'url' 또는 'extension'
+            this.format = params.get('format') || 'SINGLE';
+            this.mode = params.get('mode') || 'standard';
+            
+            // 디버깅: 전체 params 확인
+            PageLogger.debug(`Raw URLSearchParams: ${new URLSearchParams(window.location.search).toString()}`);
+            PageLogger.log(`URL params: sessionId=${this.sessionId}, source=${this.source}, format=${this.format}`);
+            
+            // 추가: 제목, 배너, 속성 포함 여부 옵션
+            this.includeTitle = params.get('includeTitle') === 'true';
+            this.includeBanner = params.get('includeBanner') === 'true';
+            this.includeTags = params.get('includeTags') === 'true';
 
-        // DOM Elements
-        this.contentArea = document.getElementById('content-area');
-        this.loadingSpinner = document.getElementById('loading-spinner');
-        this.generateBtn = document.getElementById('generate-btn');
-        this.loadingOverlay = document.getElementById('loading-spinner');
+            // DOM Elements
+            PageLogger.debug('Getting DOM elements...');
+            this.contentArea = document.getElementById('content-area');
+            PageLogger.debug(`contentArea found: ${!!this.contentArea}`);
+            
+            this.loadingSpinner = document.getElementById('loading-spinner');
+            PageLogger.debug(`loadingSpinner found: ${!!this.loadingSpinner}`);
+            
+            this.generateBtn = document.getElementById('generate-btn');
+            PageLogger.debug(`generateBtn found: ${!!this.generateBtn}`);
+            
+            this.loadingOverlay = document.getElementById('loading-spinner');
+            this.formatSelect = document.getElementById('format-select');
+            PageLogger.debug(`formatSelect found: ${!!this.formatSelect}`);
 
-        this.formatSelect = document.getElementById('format-select');
-
-        // State
-        this.selectedBreaks = new Set();
-        this.pageHeightPx = Utils.getPageHeight(this.format);
-        this.contentWidthPx = 1080;
-        this.viewerScale = 1;
-        this.isPrinting = false;
-
-        this.init();
+            // State
+            PageLogger.debug('Initializing state...');
+            this.selectedBreaks = new Set();
+            this.pageHeightPx = Utils.getPageHeight(this.format);
+            this.contentWidthPx = 1080;
+            this.viewerScale = 1;
+            this.isPrinting = false;
+            
+            PageLogger.log('constructor() completed, calling init()...');
+            this.init();
+        } catch (err) {
+            const msg = `ERROR in constructor: ${err.message}`;
+            PageLogger.error(msg, err);
+            throw err;
+        }
     }
 
     async init() {
         try {
-            Logger.log(`INIT Starting for URL: ${this.notionUrl}`, 'info');
+            PageLogger.log('=== StandardEditApp.init() started ===');
+            PageLogger.log(`URL: ${window.location.href}`);
+            
+            // 데이터 소스 결정
+            let requestUrl;
+            let loadSource = 'URL';
+
+            // 현재 URL 정보 로깅
+            PageLogger.debug(`URL parameters - url: ${this.notionUrl}, sessionId: ${this.sessionId}, source: ${this.source}`);
+            Logger.log(`URL 파라미터:`, 'debug', {
+                url: this.notionUrl,
+                sessionId: this.sessionId,
+                source: this.source
+            });
+
+            if (this.sessionId) {
+                // Chrome Extension에서 전송된 데이터
+                requestUrl = `/session-data/${this.sessionId}`;
+                loadSource = 'Chrome Extension';
+                PageLogger.log(`INIT Starting for Chrome Extension (SessionId: ${this.sessionId})`);
+                Logger.log(`INIT Starting for Chrome Extension (SessionId: ${this.sessionId})`, 'info');
+            } else if (this.notionUrl) {
+                // URL에서 렌더링
+                requestUrl = `/preview-html?url=${encodeURIComponent(this.notionUrl)}&includeTitle=true&includeBanner=true&includeTags=true`;
+                loadSource = 'Notion URL';
+                PageLogger.log(`INIT Starting for URL: ${this.notionUrl}`);
+                Logger.log(`INIT Starting for URL: ${this.notionUrl}`, 'info');
+            } else {
+                throw new Error('Extension에서 데이터를 받지 못했고, URL도 없습니다. 다시 시도하거나 URL을 제공해주세요.');
+            }
+
             if (this.formatSelect) {
                 this.formatSelect.value = this.format;
             }
@@ -45,27 +240,90 @@ class StandardEditApp {
             document.getElementById('chk-banner').checked = params.get('includeBanner') !== 'false';
             document.getElementById('chk-tags').checked = params.get('includeTags') !== 'false';
 
-            // 서버에는 항상 모든 요소를 포함해서 렌더링하도록 요청
-            const requestUrl = `/preview-html?url=${encodeURIComponent(this.notionUrl)}&includeTitle=true&includeBanner=true&includeTags=true`;
-            const response = await fetch(requestUrl);
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            // 데이터 요청
+            PageLogger.debug(`Fetching: ${requestUrl}`);
+            Logger.log(`요청 URL: ${requestUrl}`, 'debug');
+            
+            let response;
+            try {
+                PageLogger.log(`About to fetch from ${loadSource}...`);
+                response = await fetch(requestUrl);
+                PageLogger.log(`Fetch completed - status: ${response.status}`);
+                Logger.log(`Fetch completed, status: ${response.status}`, 'debug');
+            } catch (fetchErr) {
+                PageLogger.error(`Fetch failed: ${fetchErr.message}`, fetchErr);
+                Logger.log(`Fetch failed: ${fetchErr.message}`, 'error');
+                throw new Error(`네트워크 요청 실패: ${fetchErr.message}`);
             }
 
+            if (!response.ok) {
+                PageLogger.log(`Response not ok (${response.status}), parsing error...`);
+                let errorData = {};
+                try {
+                    errorData = await response.json();
+                } catch (e) {
+                    PageLogger.debug(`Failed to parse error response: ${e.message}`);
+                }
+                const detailedError = `${loadSource} 로드 실패 (${response.status}): ${errorData.error || '알 수 없는 오류'}`;
+                PageLogger.error(detailedError, errorData);
+                Logger.log(detailedError, 'error', { response: errorData });
+                throw new Error(detailedError);
+            }
+
+            PageLogger.log(`Parsing JSON response...`);
             const data = await response.json();
-            Logger.log('INIT Response received', 'success', {
+            
+            // 응답 데이터 상세 로깅
+            PageLogger.log(`Response parsed successfully`);
+            PageLogger.debug(`Response keys: ${Object.keys(data).join(', ')}`);
+            PageLogger.debug(`html: type=${typeof data.html}, length=${data.html?.length || 0}`);
+            PageLogger.debug(`detectedWidth: ${data.detectedWidth}`);
+            PageLogger.debug(`resources: type=${typeof data.resources}`);
+            if (data.resources) {
+                PageLogger.debug(`cssLinks: ${Array.isArray(data.resources.cssLinks) ? data.resources.cssLinks.length : 'NOT_ARRAY'}`);
+                PageLogger.debug(`inlineStyles: ${Array.isArray(data.resources.inlineStyles) ? data.resources.inlineStyles.length : 'NOT_ARRAY'}`);
+            }
+            
+            Logger.log(`INIT Response received from ${loadSource}`, 'success', {
                 htmlLength: data.html?.length || 0,
                 detectedWidth: data.detectedWidth,
-                cssCount: data.resources?.cssLinks?.length || 0
+                cssCount: data.resources?.cssLinks?.length || 0,
+                source: loadSource
             });
 
             if (!data.html) {
-                throw new Error('No HTML content received from server');
+                throw new Error('서버에서 HTML 콘텐츠를 받지 못했습니다.');
+            }
+
+            if (typeof data.html !== 'string') {
+                throw new Error(`HTML 타입이 잘못되었습니다: ${typeof data.html}`);
             }
 
             const { html, detectedWidth, resources } = data;
+
+            // 리소스 검증
+            if (!resources) {
+                PageLogger.debug('Resources not provided, using empty object');
+                Logger.warn('INIT Resources not provided, using empty object', 'warn');
+            }
+            
+            if (resources && typeof resources !== 'object') {
+                throw new Error(`Resources 타입이 잘못되었습니다: ${typeof resources}`);
+            }
+
+            // resources 심층 검증
+            if (resources) {
+                if (!Array.isArray(resources.cssLinks)) {
+                    PageLogger.debug('cssLinks is not an array, fixing...');
+                    Logger.warn('INIT cssLinks is not an array, fixing...', 'warn');
+                    resources.cssLinks = [];
+                }
+                if (!Array.isArray(resources.inlineStyles)) {
+                    PageLogger.debug('inlineStyles is not an array, fixing...');
+                    Logger.warn('INIT inlineStyles is not an array, fixing...', 'warn');
+                    resources.inlineStyles = [];
+                }
+            }
 
             // 리소스 로깅
             Logger.log('로드된 리소스 정보', 'title');
@@ -88,7 +346,13 @@ class StandardEditApp {
                 Utils.loadInlineStyles(resources.inlineStyles);
             }
 
-            // 3. DEBUG 정보 저장
+            // 3. Chrome Extension 소스에서 로드한 경우: 추가 Notion CSS 적용
+            if (loadSource === 'Chrome Extension') {
+                PageLogger.log('Applying Notion-specific CSS for Extension source...');
+                this.applyNotionCSS();
+            }
+
+            // 4. DEBUG 정보 저장
             const debugInfo = {
                 cssLoaded: resources?.cssLinks?.length || 0,
                 stylesLoaded: resources?.inlineStyles?.length || 0,
@@ -102,6 +366,11 @@ class StandardEditApp {
 
             // 4. HTML 주입
             Logger.log('INIT Injecting HTML...', 'info');
+            
+            if (!this.contentArea) {
+                throw new Error('DOM에서 content-area 요소를 찾을 수 없습니다. 페이지 구조를 확인해주세요.');
+            }
+            
             this.contentArea.innerHTML = html;
             
             // 테이블이 화면을 벗어나는 문제
@@ -121,14 +390,6 @@ class StandardEditApp {
             // targetElements.forEach(el => {
             //     el.style.display = 'none';
             // });
-
-            
-
-
-            
-
-
-            
 
 
             // 5. 상대 경로 수정
@@ -173,8 +434,19 @@ class StandardEditApp {
             this.contentArea.style.display = 'block';
 
         } catch (err) {
+            PageLogger.error(`INIT ERROR: ${err.message}`);
+            PageLogger.error(`Stack: ${err.stack}`);
+            
+            // localStorage에서 로그 복구해서 콘솔에 나타내기
+            try {
+                const stored = JSON.parse(localStorage.getItem('editor-page-logs') || '[]');
+                console.log('\n=== STORED LOGS (localStorage) ===');
+                stored.forEach(log => console.log(log));
+                console.log('=== END STORED LOGS ===\n');
+            } catch (e) {}
+            
             Logger.error('INIT ERROR', err);
-            alert('노션 내용을 불러오지 못했습니다:\n' + err.message);
+            alert('노션 내용을 불러오지 못했습니다:\n' + err.message + '\n\n개발자 도구(F12) > Console에서 로그를 확인해주세요.');
             this.loadingSpinner.style.display = 'none';
         }
     }
@@ -367,20 +639,33 @@ class StandardEditApp {
     updatePageBreakPreview() {
         if (!this.contentArea || this.isPrinting) return;
 
-        // 1. 블록들의 물리적 배치를 먼저 업데이트 (마진 변경 적용)
-        this.renderPageBreakLines();
+        try {
+            // 1. 블록들의 물리적 배치를 먼저 업데이트 (마진 변경 적용)
+            this.renderPageBreakLines();
 
-        // 2. 업데이트된 위치에 마커 다시 그리기
-        document.querySelectorAll('.page-break-marker').forEach(marker => marker.remove());
+            // 2. 업데이트된 위치에 마커 다시 그리기
+            document.querySelectorAll('.page-break-marker').forEach(marker => marker.remove());
 
-        // [추가] 단일 페이지(SINGLE) 포맷일 경우 마커를 새로 그리지 않고 종료
-        if (this.format === 'SINGLE') {
-            return;
-        }
+            // [추가] 단일 페이지(SINGLE) 포맷일 경우 마커를 새로 그리지 않고 종료
+            if (this.format === 'SINGLE') {
+                return;
+            }
 
-        const blocks = this.contentArea.children;
-        this.selectedBreaks.forEach(breakIndex => {
-            if (breakIndex < blocks.length - 1) {
+            const blocks = this.contentArea.children;
+            
+            // children 검증
+            if (!blocks) {
+                Logger.warn('updatePageBreakPreview: contentArea.children is undefined');
+                return;
+            }
+            
+            if (typeof blocks.length === 'undefined') {
+                Logger.warn('updatePageBreakPreview: blocks.length is undefined');
+                return;
+            }
+            
+            this.selectedBreaks.forEach(breakIndex => {
+                if (breakIndex < blocks.length - 1) {
                 const block = blocks[breakIndex];
                 
                 // 분할 위치 (밀어내기가 적용된 이후의 정확한 위치)
@@ -408,6 +693,9 @@ class StandardEditApp {
                 this.contentArea.appendChild(marker);
             }
         });
+        } catch (err) {
+            Logger.error('updatePageBreakPreview error:', err);
+        }
     }
 
     setupToggleInteraction() {
@@ -486,6 +774,18 @@ class StandardEditApp {
         this.setupToggleInteraction();
 
         const blocks = this.contentArea.children;
+        
+        // children 검증
+        if (!blocks) {
+            Logger.error('setupInteraction: contentArea.children is undefined', 'error');
+            throw new Error('컨텐츠 영역의 자식 요소에 접근할 수 없습니다.');
+        }
+        
+        if (typeof blocks.length === 'undefined') {
+            Logger.error('setupInteraction: blocks.length is undefined', 'error');
+            throw new Error('블록 길이를 결정할 수 없습니다.');
+        }
+        
         Logger.log(`setupInteraction: Found ${blocks.length} blocks`, 'info');
 
         Array.from(blocks).forEach((block, index) => {
@@ -656,6 +956,173 @@ class StandardEditApp {
                 closeSidebar();
             }
         });
+    }
+
+    /**
+     * Chrome Extension에서 로드할 때 추가 Notion CSS 적용
+     * previewData로 로드하는 것과 동일한 CSS 스타일 보장
+     */
+    applyNotionCSS() {
+        try {
+            const notionCSS = `
+                /* ========== Notion 렌더링 표준화 CSS ========== */
+                
+                /* 1. 기본 텍스트 스타일 */
+                .notion-page-content, 
+                .notion-page-content * {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+                    line-height: 1.5;
+                    color: inherit;
+                }
+                
+                /* 2. 블록 요소 기본 간격 */
+                .notion-text-block,
+                .notion-text { 
+                    display: block; 
+                    margin: 8px 0; 
+                }
+                
+                /* 3. 제목 스타일 */
+                .notion-heading,
+                .notion-heading-1,
+                .notion-heading-2,
+                .notion-heading-3 { 
+                    font-weight: 600; 
+                    margin: 16px 0 8px 0; 
+                    line-height: 1.3;
+                }
+                
+                .notion-heading-1 { font-size: 1.875em; }
+                .notion-heading-2 { font-size: 1.5em; }
+                .notion-heading-3 { font-size: 1.25em; }
+                
+                /* 4. 구분선 */
+                .notion-divider { 
+                    border: 0; 
+                    border-top: 1px solid #e0e0e0; 
+                    margin: 16px 0; 
+                }
+                
+                /* 5. 이미지 */
+                .notion-image,
+                .notion-image-block { 
+                    max-width: 100%; 
+                    height: auto; 
+                    margin: 8px 0; 
+                    display: block;
+                }
+                
+                /* 6. 북마크 */
+                .notion-bookmark { 
+                    padding: 12px; 
+                    background: #f5f5f5; 
+                    border-radius: 4px; 
+                    margin: 8px 0; 
+                    display: block;
+                }
+                
+                /* 7. 인용문 */
+                .notion-quote { 
+                    border-left: 4px solid #6366f1; 
+                    padding-left: 12px; 
+                    margin: 8px 0; 
+                    display: block;
+                }
+                
+                /* 8. 코드 */
+                .notion-code,
+                code { 
+                    background: #f5f5f5; 
+                    padding: 2px 6px; 
+                    border-radius: 3px; 
+                    font-family: 'Monaco', 'Courier New', monospace; 
+                    font-size: 0.85em;
+                }
+                
+                /* 9. 코드 블록 */
+                .notion-code-block,
+                pre { 
+                    background: #f5f5f5; 
+                    padding: 12px; 
+                    border-radius: 4px; 
+                    margin: 8px 0;
+                    overflow-x: auto;
+                }
+                
+                /* 10. 테이블 */
+                .notion-table-content { 
+                    overflow-x: auto; 
+                    margin: 8px 0;
+                }
+                
+                .notion-table-content table {
+                    border-collapse: collapse;
+                }
+                
+                .notion-table-content th,
+                .notion-table-content td {
+                    border: 1px solid #e0e0e0;
+                    padding: 8px 12px;
+                }
+                
+                /* 11. 리스트 */
+                .notion-bulleted-list, 
+                .notion-numbered-list {
+                    margin: 8px 0;
+                }
+                
+                /* 12. 토글 블록 */
+                .notion-toggle-block {
+                    margin: 8px 0;
+                }
+                
+                .notion-toggle-block [role="button"] {
+                    cursor: pointer;
+                    user-select: none;
+                }
+                
+                /* 13. 페이지 블록 컨테이너 */
+                .notion-page-block {
+                    margin: 0;
+                    padding: 0;
+                }
+                
+                /* 14. 이미지 래퍼 */
+                .notion-asset-wrapper {
+                    margin: 8px 0;
+                    display: block;
+                }
+                
+                /* 15. 체크박스 */
+                .notion-checkbox {
+                    margin-right: 8px;
+                }
+                
+                /* 16. 드래그 핸들 숨김 */
+                .notion-drag-handle,
+                [aria-label*="drag"],
+                [data-drag-handle] {
+                    display: none !important;
+                }
+                
+                /* 17. 에디트 버튼 숨김 */
+                [data-testid="editOptions"],
+                .notion-edit-button {
+                    display: none !important;
+                }
+            `;
+
+            const styleEl = document.createElement('style');
+            styleEl.id = 'notion-extension-css';
+            styleEl.textContent = notionCSS;
+            document.head.appendChild(styleEl);
+            
+            PageLogger.log('Notion-specific CSS applied successfully');
+            Logger.log('✓ Notion CSS 적용 완료', 'success');
+        } catch (err) {
+            PageLogger.warn('Failed to apply Notion CSS: ' + err.message);
+            Logger.warn('Notion CSS 적용 실패', err.message);
+        }
     }
 
     getMargins() {
@@ -1162,10 +1629,50 @@ class StandardEditApp {
 }
 
 // 페이지 로드 시 앱 초기화
+console.warn('[Init] Page load detection - readyState:', document.readyState);
+
+function initializeApp() {
+    try {
+        // 이전 로그 로드
+        try {
+            const stored = JSON.parse(localStorage.getItem('editor-page-logs') || '[]');
+            if (stored.length > 0) {
+                console.log('\n=== RECOVERED LOGS FROM localStorage ===');
+                stored.forEach(log => console.log(log));
+                console.log('=== END RECOVERED LOGS ===\n');
+            }
+        } catch (e) {}
+        
+        // 이번 세션을 위해 초기화
+        localStorage.setItem('editor-page-logs', JSON.stringify([]));
+        
+        PageLogger.log('Creating StandardEditApp instance...');
+        window.app = new StandardEditApp();
+        PageLogger.log('StandardEditApp instance created successfully!');
+    } catch (err) {
+        const msg = `FATAL ERROR: ${err.message}\n${err.stack}`;
+        PageLogger.error(msg, err);
+        console.error(msg);
+        alert('앱 초기화 오류: ' + err.message);
+    }
+}
+
+// 여러 방법으로 초기화 시도
 if (document.readyState === 'loading') {
+    console.warn('[Init] Document is loading, listening for DOMContentLoaded');
     document.addEventListener('DOMContentLoaded', () => {
-        new StandardEditApp();
+        console.warn('[Init] DOMContentLoaded event fired');
+        setTimeout(initializeApp, 100); // 약간의 딜레이
     });
 } else {
-    new StandardEditApp();
+    console.warn('[Init] Document already loaded, initializing immediately');
+    setTimeout(initializeApp, 100);
 }
+
+// Fallback: 100ms 후에도 앱이 없으면 다시 시도
+setTimeout(() => {
+    if (!window.app) {
+        console.warn('[Init] App not initialized, retrying...');
+        initializeApp();
+    }
+}, 200);

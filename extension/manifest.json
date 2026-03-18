@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Notion to PDF - Direct Convert",
+  "version": "0.1.0",
+  "description": "Capture Notion page content and convert to PDF directly from your browser",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.notion.so/*",
+    "https://*.notion.site/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Notion to PDF"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.notion.so/*",
+        "https://*.notion.site/*",
+        "https://notion.so/*",
+        "https://notion.site/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "icons": {
+    "16": "/images/favicon.ico",
+    "48": "/images/favicon.ico",
+    "128": "/images/favicon.ico"
+  }
+}

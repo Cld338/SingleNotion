@@ -177,8 +177,10 @@ app.get('/proxy-asset', async (req, res) => {
     try {
         const parsedUrl = new URL(targetUrl);
         
-        // 1. 도메인 화이트리스트 검증 (pdfService.js의 로직 활용)
-        const isAllowedDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(targetUrl);
+        // 1. 도메인 화이트리스트 검증 
+        // - 자신의 서버 (notion-pdf.cld338.me)
+        // - Notion 공식 도메인 (notion.so, notion.site)
+        const isAllowedDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion-pdf\.cld338\.me|notion\.so|notion\.site)/.test(targetUrl);
         
         if (!isAllowedDomain) {
             logger.warn(`허용되지 않은 도메인 접근 시도 차단: ${targetUrl}`);
@@ -199,7 +201,16 @@ app.get('/proxy-asset', async (req, res) => {
             }
         });
 
-        res.set('Content-Type', response.headers['content-type']);
+        // Content-Type 설정: CSS 파일의 경우 명시적으로 text/css 설정
+        let contentType = response.headers['content-type'];
+        if (targetUrl.endsWith('.css') && !contentType) {
+            contentType = 'text/css; charset=utf-8';
+        } else if (targetUrl.endsWith('.css') && contentType === 'text/html') {
+            // 서버가 CSS를 HTML로 반환하는 경우 교정
+            contentType = 'text/css; charset=utf-8';
+        }
+
+        res.set('Content-Type', contentType || 'application/octet-stream');
         res.set('Access-Control-Allow-Origin', '*'); 
         res.set('Cache-Control', 'public, max-age=31536000, immutable');
         res.send(response.data);
