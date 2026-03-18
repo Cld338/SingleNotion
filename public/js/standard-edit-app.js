@@ -7,6 +7,8 @@ class StandardEditApp {
         // URL Parameters
         const params = new URLSearchParams(window.location.search);
         this.notionUrl = params.get('url');
+        this.sessionId = params.get('sessionId');
+        this.source = params.get('source'); // 'extension' or undefined
         this.format = params.get('format') || 'SINGLE';
         this.mode = params.get('mode') || 'standard';
         
@@ -35,7 +37,14 @@ class StandardEditApp {
 
     async init() {
         try {
-            Logger.log(`INIT Starting for URL: ${this.notionUrl}`, 'info');
+            // sessionId 또는 url 중 하나 필요
+            if (!this.sessionId && !this.notionUrl) {
+                throw new Error('url 또는 sessionId 파라미터가 필요합니다.');
+            }
+
+            const dataSource = this.sessionId ? `sessionId=${this.sessionId}` : `URL=${this.notionUrl}`;
+            Logger.log(`INIT Starting for ${dataSource}`, 'info');
+            
             if (this.formatSelect) {
                 this.formatSelect.value = this.format;
             }
@@ -45,8 +54,18 @@ class StandardEditApp {
             document.getElementById('chk-banner').checked = params.get('includeBanner') !== 'false';
             document.getElementById('chk-tags').checked = params.get('includeTags') !== 'false';
 
-            // 서버에는 항상 모든 요소를 포함해서 렌더링하도록 요청
-            const requestUrl = `/preview-html?url=${encodeURIComponent(this.notionUrl)}&includeTitle=true&includeBanner=true&includeTags=true`;
+            // 데이터 로드 - sessionId가 있으면 session-data에서, 아니면 preview-html에서
+            let requestUrl;
+            if (this.sessionId) {
+                // Extension에서 캡처한 데이터 로드
+                requestUrl = `/session-data/${this.sessionId}`;
+                Logger.log('Extension session 데이터 로드 중...', 'info');
+            } else {
+                // 기존 방식: Notion URL에서 데이터 로드
+                requestUrl = `/preview-html?url=${encodeURIComponent(this.notionUrl)}&includeTitle=true&includeBanner=true&includeTags=true`;
+                Logger.log(`Notion URL 데이터 로드 중: ${this.notionUrl}`, 'info');
+            }
+
             const response = await fetch(requestUrl);
 
             if (!response.ok) {
@@ -58,14 +77,21 @@ class StandardEditApp {
             Logger.log('INIT Response received', 'success', {
                 htmlLength: data.html?.length || 0,
                 detectedWidth: data.detectedWidth,
-                cssCount: data.resources?.cssLinks?.length || 0
+                cssCount: data.resources?.cssLinks?.length || 0,
+                source: data.metadata?.source || 'direct'
             });
 
             if (!data.html) {
                 throw new Error('No HTML content received from server');
             }
 
-            const { html, detectedWidth, resources } = data;
+            const { html, detectedWidth, resources, metadata } = data;
+
+            // Extension 데이터인 경우 metadata에서 URL 추출
+            if (metadata?.url && !this.notionUrl) {
+                this.notionUrl = metadata.url;
+                Logger.log(`URL extracted from metadata: ${this.notionUrl}`, 'info');
+            }
 
             // 리소스 로깅
             Logger.log('로드된 리소스 정보', 'title');
@@ -78,31 +104,95 @@ class StandardEditApp {
 
             Logger.log(`INIT Scale: ${this.viewerScale.toFixed(4)} (Page: ${pageWidthPx}px, Content: ${this.contentWidthPx}px)`, 'info');
 
-            // 1. CSS 로드
+            // 1. CSS 로드 - Extension인 경우 콘텐츠 영역으로 한정
             if (resources?.cssLinks?.length) {
-                await Utils.loadCSSResources(resources.cssLinks);
+                if (this.source === 'extension') {
+                    Logger.log('INIT Loading CSS (scoped to content-area)...', 'info');
+                    await Utils.loadCSSResourcesScoped(resources.cssLinks, '#content-area');
+                } else {
+                    Logger.log('INIT Loading CSS (global scope)...', 'info');
+                    await Utils.loadCSSResources(resources.cssLinks);
+                }
             }
 
-            // 2. 인라인 스타일 로드
+            // 2. 인라인 스타일 로드 - Extension인 경우 콘텐츠 영역으로 한정
             if (resources?.inlineStyles?.length) {
-                Utils.loadInlineStyles(resources.inlineStyles);
+                if (this.source === 'extension') {
+                    Logger.log('INIT Loading inline styles (scoped to content-area)...', 'info');
+                    Utils.loadInlineStylesScoped(resources.inlineStyles, '#content-area');
+                } else {
+                    Logger.log('INIT Loading inline styles (global scope)...', 'info');
+                    Utils.loadInlineStyles(resources.inlineStyles);
+                }
             }
 
-            // 3. DEBUG 정보 저장
+            // 3. 스크립트 로드 (외부 + 인라인)
+            if (resources?.scripts?.length) {
+                Logger.log('INIT Loading scripts...', 'info');
+                await Utils.loadScripts(resources.scripts);
+            }
+
+            // 4. 아이콘 로드
+            if (resources?.icons?.length) {
+                Logger.log('INIT Loading icons...', 'info');
+                Utils.loadIcons(resources.icons);
+            }
+
+            // 5. 웹 폰트 로드
+            if (resources?.fonts?.length) {
+                Logger.log('INIT Loading fonts...', 'info');
+                Utils.loadFonts(resources.fonts);
+            }
+
+            // 6. KaTeX 리소스 로드
+            if (resources?.katexResources?.length) {
+                Logger.log('INIT Loading KaTeX resources...', 'info');
+                await Utils.loadKaTeX(resources.katexResources);
+            }
+
+            // 7. 비디오/오디오 메타데이터 로깅
+            if (resources?.videos?.length) {
+                Logger.log(`INIT Video/Audio media found: ${resources.videos.length} items`, 'info');
+            }
+
+            // 8. DEBUG 정보 저장
             const debugInfo = {
                 cssLoaded: resources?.cssLinks?.length || 0,
                 stylesLoaded: resources?.inlineStyles?.length || 0,
+                scriptsLoaded: resources?.scripts?.length || 0,
+                iconsLoaded: resources?.icons?.length || 0,
+                fontsLoaded: resources?.fonts?.length || 0,
+                katexLoaded: resources?.katexResources?.length || 0,
+                videosLoaded: resources?.videos?.length || 0,
                 contentWidth: detectedWidth,
                 scale: this.viewerScale,
                 timestamp: new Date().toISOString(),
-                url: this.notionUrl
+                url: this.notionUrl || `sessionId=${this.sessionId}`,
+                source: this.source || 'direct'
             };
             localStorage.setItem('debug-preview-info', JSON.stringify(debugInfo));
             Logger.log('DEBUG Info saved to localStorage', 'debug', debugInfo);
 
-            // 4. HTML 주입
+            // 9. HTML 주입
             Logger.log('INIT Injecting HTML...', 'info');
+            
+            // [디버그] 주입 전 HTML 상태 확인
+            const styleMatchBefore = html.match(/style="[^"]{0,150}"/i);
+            if (styleMatchBefore) {
+                Logger.log(`[DEBUG-BEFORE-INJECTION] Style sample: ${styleMatchBefore[0]}`, 'debug');
+            }
+            const maskMatchBefore = html.match(/mask:\s*url\([^)]+\)/i);
+            if (maskMatchBefore) {
+                Logger.log(`[DEBUG-BEFORE-INJECTION] Mask URL: ${maskMatchBefore[0]}`, 'debug');
+            }
+            
             this.contentArea.innerHTML = html;
+            
+            // [디버그] 주입 후 DOM 상태 확인
+            const injectedStyle = this.contentArea.querySelector('[style*="mask"]');
+            if (injectedStyle) {
+                Logger.log(`[DEBUG-AFTER-INJECTION] Style attribute: ${injectedStyle.getAttribute('style')}`, 'debug');
+            }
             
             // 테이블이 화면을 벗어나는 문제
             const targetElements = this.contentArea.querySelectorAll('.notion-table-content');
@@ -117,25 +207,11 @@ class StandardEditApp {
                 }
             });
 
-            // const recordIcon = this.contentArea.querySelectorAll('#content-area > .notion-record-icon;');
-            // targetElements.forEach(el => {
-            //     el.style.display = 'none';
-            // });
-
-            
-
-
-            
-
-
-            
-
-
-            // 5. 상대 경로 수정
+            // 10. 상대 경로 수정
             Logger.log('INIT Fixing relative paths...', 'info');
             Utils.fixRelativePaths(this.notionUrl, this.contentArea);
 
-            // 6. CSS 적용 대기
+            // 11. CSS 적용 대기
             Logger.log('INIT Waiting for CSS to apply...', 'info');
             await new Promise(resolve => {
                 requestAnimationFrame(() => {
@@ -143,28 +219,27 @@ class StandardEditApp {
                 });
             });
 
-            // 7. 뷰어 스케일 적용
+            // 12. 뷰어 스케일 적용
             Logger.log('INIT Applying viewer scale...', 'info');
             this.updateScaleAndLayout();
 
-            // 8. 상호작용 설정
+            // 13. 상호작용 설정
             Logger.log('INIT Setting up interaction...', 'info');
             this.setupInteraction();
 
-            // 9. 페이지 구분선 렌더링
+            // 14. 페이지 구분선 렌더링
             Logger.log('INIT Rendering page layout...', 'info');
             this.updatePageBreakPreview(); 
 
-
-            // 10. DOM 상태 로깅
+            // 15. DOM 상태 로깅
             Logger.logDomStatus();
 
-            // 11. 텍스트 선택 방지
+            // 16. 텍스트 선택 방지
             this.contentArea.addEventListener('selectstart', (e) => e.preventDefault());
             this.contentArea.addEventListener('select', (e) => e.preventDefault());
             this.contentArea.addEventListener('dblclick', (e) => e.preventDefault());
 
-            // 12. 이벤트 리스너 설정
+            // 17. 이벤트 리스너 설정
             this.setupEventListeners();
 
             Logger.log('INIT ✓ Preview loaded successfully!', 'success');

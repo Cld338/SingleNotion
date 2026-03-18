@@ -3,9 +3,11 @@ const Joi = require('joi');
 const path = require('path');
 const fs = require('fs');
 const rateLimit = require('express-rate-limit');
-const { pdfQueue } = require('../config/queue');
+const { pdfQueue, connection } = require('../config/queue');
 const logger = require('../utils/logger');
 const pdfService = require('../services/pdfService');
+const URLPathConverter = require('../utils/urlPathConverter');
+const crypto = require('crypto');
 
 const router = express.Router();
 
@@ -90,8 +92,18 @@ router.get('/preview-html', async (req, res) => {
         
         logger.info(`Preview loaded - Detected width: ${detectedWidth}px, HTML length: ${html.length}, CSS: ${resources?.cssLinks?.length || 0}, JS: ${resources?.jsScripts?.length || 0}`);
         
+        // 모든 외부 URL과 상대 경로를 proxy-asset으로 변환 (CORS 에러 방지)
+        let processedHtml = html;
+        if (html && url) {
+            logger.debug(`Converting all URLs in preview HTML to proxy-asset with baseUrl: ${url}`);
+            const urlCountBefore = (html.match(/https?:\/\//g) || []).length;
+            processedHtml = URLPathConverter.convertAllToProxyAsset(html, url);
+            const urlCountAfter = (processedHtml.match(/https?:\/\//g) || []).length;
+            logger.debug(`Proxy-asset conversion completed: ${urlCountBefore} external URLs → ${urlCountAfter}`);
+        }
+        
         res.json({
-            html: html,
+            html: processedHtml,
             detectedWidth: detectedWidth,
             resources: resources || {
                 cssLinks: [],
@@ -315,6 +327,147 @@ router.post('/render-html', renderHtmlLimiter, async (req, res) => {
         logger.error(`Failed to render HTML to PDF: ${err.message}`, { stack: err.stack });
         if (!res.headersSent) {
             res.status(500).json({ error: `PDF 렌더링 실패: ${err.message}` });
+        }
+    }
+});
+
+/**
+ * Extension에서 캡처한 데이터를 받아 Redis에 저장
+ * POST /render-from-extension
+ * Body: {
+ *   html: string,
+ *   detectedWidth: number,
+ *   resources: { cssLinks: [], inlineStyles: [] },
+ *   metadata: { url, title, timestamp, ... }
+ * }
+ */
+router.post('/render-from-extension', async (req, res) => {
+    try {
+        const { html, resources, metadata, detectedWidth } = req.body;
+
+        // 입력 검증
+        if (!html || typeof html !== 'string') {
+            logger.warn('Invalid HTML in render-from-extension request');
+            return res.status(400).json({ error: 'HTML content is required and must be a string' });
+        }
+
+        if (!resources || typeof resources !== 'object') {
+            logger.warn('Invalid resources in render-from-extension request');
+            return res.status(400).json({ error: 'resources object is required' });
+        }
+
+        if (!metadata || typeof metadata !== 'object') {
+            logger.warn('Invalid metadata in render-from-extension request');
+            return res.status(400).json({ error: 'metadata object is required' });
+        }
+
+        // sessionId 생성
+        const sessionId = crypto.randomBytes(12).toString('hex');
+        const sessionKey = `extension-session:${sessionId}`;
+
+        // 세션 데이터 구성 - extension에서 수집한 모든 리소스 저장
+        const sessionData = {
+            html,
+            detectedWidth: detectedWidth || 1080,
+            resources: {
+                cssLinks: Array.isArray(resources.cssLinks) ? resources.cssLinks : [],
+                inlineStyles: Array.isArray(resources.inlineStyles) ? resources.inlineStyles : [],
+                scripts: Array.isArray(resources.scripts) ? resources.scripts : [],
+                icons: Array.isArray(resources.icons) ? resources.icons : [],
+                fonts: Array.isArray(resources.fonts) ? resources.fonts : [],
+                katexResources: Array.isArray(resources.katexResources) ? resources.katexResources : [],
+                videos: Array.isArray(resources.videos) ? resources.videos : []
+            },
+            metadata: {
+                ...metadata,
+                source: 'extension',
+                createdAt: new Date().toISOString(),
+                // baseUrl이 없으면 url에서 추출 (정규화)
+                baseUrl: metadata.baseUrl || (() => {
+                    try {
+                        const urlObj = new URL(metadata.url);
+                        return `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}`;
+                    } catch {
+                        return metadata.url;
+                    }
+                })()
+            }
+        };
+
+        // Redis에 저장 (24시간 TTL)
+        await connection.setex(
+            sessionKey,
+            86400,
+            JSON.stringify(sessionData)
+        );
+
+        logger.info(`Session created for extension: sessionId=${sessionId}, htmlLength=${html.length}, metadata=${JSON.stringify(metadata)}`);
+
+        res.status(201).json({
+            success: true,
+            sessionId,
+            message: 'Extension data saved successfully'
+        });
+
+    } catch (err) {
+        logger.error(`Failed to process render-from-extension: ${err.message}`, { stack: err.stack });
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to save extension data' });
+        }
+    }
+});
+
+/**
+ * 저장된 세션 데이터 조회
+ * GET /session-data/:sessionId
+ */
+router.get('/session-data/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+
+        // sessionId 유효성 검사 (16진수 24자리)
+        if (!/^[a-f0-9]{24}$/.test(sessionId)) {
+            logger.warn(`Invalid sessionId format: ${sessionId}`);
+            return res.status(400).json({ error: 'Invalid sessionId format' });
+        }
+
+        const sessionKey = `extension-session:${sessionId}`;
+        const sessionDataStr = await connection.get(sessionKey);
+
+        if (!sessionDataStr) {
+            logger.warn(`Session not found: sessionId=${sessionId}`);
+            return res.status(404).json({ error: 'Session data not found or expired' });
+        }
+
+        const sessionData = JSON.parse(sessionDataStr);
+
+        logger.info(`Session retrieved: sessionId=${sessionId}, htmlLength=${sessionData.html.length}`);
+
+        // [Step 1] HTML 경로 변환 (상대 경로 → 절대 경로)
+        const baseUrl = sessionData.metadata?.baseUrl || sessionData.metadata?.url;
+        if (baseUrl && sessionData.html) {
+            logger.debug(`Converting paths in HTML using baseUrl: ${baseUrl}`);
+            sessionData.html = URLPathConverter.convertAll(sessionData.html, baseUrl);
+            logger.debug(`HTML path conversion completed, new length: ${sessionData.html.length}`);
+        }
+
+        // [Step 2] 모든 외부 URL과 상대 경로를 proxy-asset으로 변환 (CORS 에러 방지)
+        // baseUrl을 전달하여 상대 경로(/_assets/...)도 처리
+        if (sessionData.html) {
+            logger.debug(`Converting all URLs to proxy-asset${baseUrl ? ` with baseUrl: ${baseUrl}` : ''}`);
+            const urlCountBefore = (sessionData.html.match(/https?:\/\//g) || []).length;
+            sessionData.html = URLPathConverter.convertAllToProxyAsset(sessionData.html, baseUrl);
+            const urlCountAfter = (sessionData.html.match(/https?:\/\//g) || []).length;
+            const relativePathCount = (sessionData.html.match(/(?:href|src)=["']\/[^"']*["']/g) || []).length;
+            logger.debug(`Proxy-asset conversion completed: ${urlCountBefore} external URLs → ${urlCountAfter}, relative paths converted: ${relativePathCount > 0 ? 'yes' : 'no'}`);
+        }
+
+        res.json(sessionData);
+
+    } catch (err) {
+        logger.error(`Failed to retrieve session data: ${err.message}`, { stack: err.stack });
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to retrieve session data' });
         }
     }
 });

@@ -7,6 +7,7 @@ const logger = require('./logger');
 class URLPathConverter {
     /**
      * 원시 경로에서 따옴표 정보를 추출합니다
+     * HTML 엔티티도 함께 디코딩합니다
      * @param {string} rawPath - 원시 경로
      * @returns {Object} { hasQuote: boolean, quoteFormat: string|null, cleanPath: string }
      */
@@ -26,12 +27,20 @@ class URLPathConverter {
             quoteFormat = '&quot;';
         }
 
-        const cleanPath = rawPath
+        let cleanPath = rawPath
             .trim()
             .replace(/^["']+|["']+$/g, '')       // 시작/끝 따옴표 제거 (여러 개)
             .replace(/&quot;/g, '')              // HTML 엔티티 따옴표 제거
             .replace(/&#34;/g, '')               // 수치 HTML 엔티티 제거
             .trim();
+        
+        // HTML 엔티티 디코딩 (특히 &amp; → &, &lt; → <, &gt; → >)
+        // 이는 URL 파라미터가 HTML 엔티티로 인코딩된 경우를 처리
+        cleanPath = cleanPath
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&apos;/g, "'");
 
         return { hasQuote, quoteFormat, cleanPath };
     }
@@ -188,6 +197,147 @@ class URLPathConverter {
                 return `style="${updatedStyle}"`;
             }
         );
+    }
+
+    /**
+     * 외부 URL을 proxy-asset으로 변환합니다
+     * (data: URI와 이미 /proxy-asset인 것은 제외)
+     * 상대 경로는 baseOrigin을 사용해 절대 경로로 변환한 후 proxy-asset으로 변환
+     * @param {string} url - URL
+     * @param {string} baseOrigin - 기본 origin (상대 경로 처리용)
+     * @returns {string} proxy-asset 형태의 URL 또는 원본 URL
+     */
+    static convertToProxyAsset(url, baseOrigin = null) {
+        if (!url) return url;
+        
+        // 이미 proxy-asset이거나 data URI인 경우 그대로 반환
+        if (url.includes('/proxy-asset') || url.startsWith('data:')) {
+            return url;
+        }
+        
+        // 외부 URL (http/https)인 경우 proxy-asset으로 변환
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            return `/proxy-asset?url=${encodeURIComponent(url)}`;
+        }
+        
+        // 상대 경로인 경우 baseOrigin을 사용해 절대 경로로 변환 후 proxy-asset으로 변환
+        if (baseOrigin && (url.startsWith('/') || url.startsWith('./'))) {
+            const absoluteUrl = url.startsWith('/') 
+                ? `${baseOrigin}${url}`
+                : `${baseOrigin}/${url}`;
+            return `/proxy-asset?url=${encodeURIComponent(absoluteUrl)}`;
+        }
+        
+        // 상대 경로인데 baseOrigin이 없으면 그대로 반환 (나중에 처리될 것으로 예상)
+        return url;
+    }
+
+    /**
+     * src/href 속성의 모든 URL을 proxy-asset으로 변환합니다
+     * HTML 엔티티(&amp;, &lt;, &gt; 등)를 먼저 디코딩합니다
+     * @param {string} html - HTML 문자열
+     * @param {string} baseOrigin - 기본 origin
+     * @returns {string} 변환된 HTML
+     */
+    static convertSrcHrefToProxyAsset(html, baseOrigin = null) {
+        return html.replace(
+            /(?:src|href)=["']([^"']+)["']/gi,
+            (match, url) => {
+                // HTML 엔티티 디코딩
+                let decodedUrl = url
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&apos;/g, "'")
+                    .replace(/&quot;/g, '"');
+                
+                const proxiedUrl = URLPathConverter.convertToProxyAsset(decodedUrl, baseOrigin);
+                return match.replace(url, proxiedUrl);
+            }
+        );
+    }
+
+    /**
+     * style 속성 내의 url()을 proxy-asset으로 변환합니다
+     * @param {string} html - HTML 문자열
+     * @param {string} baseOrigin - 기본 origin
+     * @returns {string} 변환된 HTML
+     */
+    static convertStyleUrlsToProxyAsset(html, baseOrigin = null) {
+        return html.replace(
+            /style=["']([^"']*)["']/gi,
+            (match, styleContent) => {
+                let updatedStyle = styleContent.replace(
+                    /url\s*\(\s*([^)]*)\s*\)/g,
+                    (urlMatch, rawPath) => {
+                        try {
+                            const { hasQuote, quoteFormat, cleanPath } = URLPathConverter.extractQuoteInfo(rawPath);
+                            const proxiedUrl = URLPathConverter.convertToProxyAsset(cleanPath, baseOrigin);
+                            const restoreQuotedUrl = URLPathConverter.restoreQuoteFormat(proxiedUrl, hasQuote, quoteFormat);
+                            
+                            if (quoteFormat === '&quot;') {
+                                return `url(&quot;${proxiedUrl}&quot;)`;
+                            } else {
+                                return `url(${restoreQuotedUrl})`;
+                            }
+                        } catch (err) {
+                            logger.warn(`Failed to convert style URL to proxy-asset: ${rawPath}`);
+                            return urlMatch;
+                        }
+                    }
+                );
+                return `style="${updatedStyle}"`;
+            }
+        );
+    }
+
+    /**
+     * background-image의 url()을 proxy-asset으로 변환합니다
+     * @param {string} html - HTML 문자열
+     * @param {string} baseOrigin - 기본 origin
+     * @returns {string} 변환된 HTML
+     */
+    static convertBackgroundImageUrlsToProxyAsset(html, baseOrigin = null) {
+        return html.replace(
+            /background-image\s*:\s*url\s*\(\s*([^)]*)\s*\)/gi,
+            (match, rawPath) => {
+                try {
+                    const { hasQuote, quoteFormat, cleanPath } = URLPathConverter.extractQuoteInfo(rawPath);
+                    const proxiedUrl = URLPathConverter.convertToProxyAsset(cleanPath, baseOrigin);
+                    const restoreQuotedUrl = URLPathConverter.restoreQuoteFormat(proxiedUrl, hasQuote, quoteFormat);
+                    
+                    if (quoteFormat === '&quot;') {
+                        return `background-image: url(&quot;${proxiedUrl}&quot;)`;
+                    } else {
+                        return `background-image: url(${restoreQuotedUrl})`;
+                    }
+                } catch (err) {
+                    logger.warn(`Failed to convert background-image URL to proxy-asset: ${rawPath}`);
+                    return match;
+                }
+            }
+        );
+    }
+
+    /**
+     * 모든 외부 URL을 proxy-asset으로 변환합니다
+     * (상대 경로와 절대 경로 모두 처리)
+     * @param {string} html - HTML 문자열
+     * @param {string} baseUrl - 기본 URL (상대 경로 처리용)
+     * @returns {string} 변환된 HTML
+     */
+    static convertAllToProxyAsset(html, baseUrl = null) {
+        try {
+            const baseOrigin = baseUrl ? new URL(baseUrl).origin : null;
+            let processedHtml = html;
+            processedHtml = URLPathConverter.convertSrcHrefToProxyAsset(processedHtml, baseOrigin);
+            processedHtml = URLPathConverter.convertBackgroundImageUrlsToProxyAsset(processedHtml, baseOrigin);
+            processedHtml = URLPathConverter.convertStyleUrlsToProxyAsset(processedHtml, baseOrigin);
+            return processedHtml;
+        } catch (err) {
+            logger.warn(`Error converting URLs to proxy-asset: ${err.message}`);
+            return html;
+        }
     }
 
     /**

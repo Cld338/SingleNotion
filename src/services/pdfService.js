@@ -12,6 +12,37 @@ class PdfService {
         return URLPathConverter.convertAll(html, baseUrl);
     }
 
+    /**
+     * CSS 텍스트 내의 url() 함수 경로를 proxy-asset으로 변환 (서버 측)
+     * 예: url("https://notion.site/icon.svg") → url('/proxy-asset?url=...')
+     */
+    convertCssUrlsToProxyAsset(cssText) {
+        if (!cssText) return cssText;
+
+        return cssText.replace(
+            /url\(\s*['"]?(?!(?:\/proxy-asset|data:))([^)'"]+)['"]?\s*\)/gi,
+            (match, urlPath) => {
+                // 경로 정리 (앞뒤 공백 제거)
+                urlPath = urlPath.trim();
+                
+                // 이미 proxy-asset이거나 data URI는 그대로
+                if (urlPath.includes('/proxy-asset') || urlPath.startsWith('data:')) {
+                    return match;
+                }
+                
+                // 절대 경로(http/https 포함)는 proxy-asset으로 변환
+                if (urlPath.startsWith('http://') || urlPath.startsWith('https://') || urlPath.startsWith('//')) {
+                    const absolutePath = urlPath.startsWith('//') ? 'https:' + urlPath : urlPath;
+                    const proxiedUrl = `/proxy-asset?url=${encodeURIComponent(absolutePath)}`;
+                    logger.debug(`[PdfService] Converting CSS url path: ${urlPath.substring(0, 60)}...`);
+                    return `url('${proxiedUrl}')`;
+                }
+                
+                return match;
+            }
+        );
+    }
+
     // 노션 페이지의 콘텐츠 너비 및 HTML 측정 (미리보기용)
     async getPreviewData(url, options={}) {
         const browser = await browserPool.acquire();
@@ -210,6 +241,33 @@ class PdfService {
 
             // 콘텐츠 너비, HTML 및 필요한 리소스 추출
             const result = await page.evaluate((opts) => {
+                // ✅ CSS url() 변환 함수 (평가 환경에서 실행)
+                function convertCssUrlsToProxyAsset(cssText) {
+                    if (!cssText) return cssText;
+                    
+                    return cssText.replace(
+                        /url\(\s*['"]?(?!(?:\/proxy-asset|data:))([^)'"]+)['"]?\s*\)/gi,
+                        (match, urlPath) => {
+                            urlPath = urlPath.trim();
+                            
+                            // 이미 proxy-asset이거나 data URI는 그대로
+                            if (urlPath.includes('/proxy-asset') || urlPath.startsWith('data:')) {
+                                return match;
+                            }
+                            
+                            // 절대 경로(http/https 포함)는 proxy-asset으로 변환
+                            if (urlPath.startsWith('http://') || urlPath.startsWith('https://') || urlPath.startsWith('//')) {
+                                const absolutePath = urlPath.startsWith('//') ? 'https:' + urlPath : urlPath;
+                                const proxiedUrl = `/proxy-asset?url=${encodeURIComponent(absolutePath)}`;
+                                console.log('[Preview-CSS] Converting CSS url path:', urlPath.substring(0, 60) + '...');
+                                return `url('${proxiedUrl}')`;
+                            }
+                            
+                            return match;
+                        }
+                    );
+                }
+
                 // const { includeTitle, includeBanner, includeTags } = opts;
 
                 const includeTitle = true;
@@ -367,10 +425,22 @@ class PdfService {
                     
                     // 매우 큰 스타일만 제외 (1MB 이상)
                     if (contentLength < 1000000) {
+                        // ✅ CSS 내 url() 경로를 proxy-asset으로 변환
+                        const convertedCssText = convertCssUrlsToProxyAsset(style.textContent);
                         resources.inlineStyles.push({
                             id: id,
-                            content: style.textContent
+                            content: convertedCssText
                         });
+                    }
+                });
+
+                // ✅ 또한 요소의 style 속성 내 url() 경로도 처리 (인라인 스타일)
+                console.log('[Preview] Converting inline style attributes with url()...');
+                document.querySelectorAll('[style*="url"]').forEach((el) => {
+                    const styleAttr = el.getAttribute('style');
+                    if (styleAttr && styleAttr.includes('url(')) {
+                        const convertedStyle = convertCssUrlsToProxyAsset(styleAttr);
+                        el.setAttribute('style', convertedStyle);
                     }
                 });
 
@@ -490,6 +560,14 @@ class PdfService {
 
             logger.info(`getPreviewData - Debug: ${JSON.stringify(result.debug)}`);
             logger.info(`getPreviewData - Width: ${result.detectedWidth}`);
+            
+            // ⚠️ Debug: 서버 수신 HTML에서 mask 속성 확인
+            const maskMatches = result.html.match(/mask:\s*url\([^)]*\)/gi) || [];
+            logger.info(`[DEBUG] mask: url() patterns received from client: ${maskMatches.length}`);
+            maskMatches.slice(0, 3).forEach((match, idx) => {
+                logger.debug(`[DEBUG] Mask ${idx + 1}: ${match.substring(0, 100)}`);
+            });
+            
             logger.info(`getPreviewData - Resources Summary:`);
             logger.info(`  - CSS Links: ${result.resources.cssLinks.length}`);
             logger.info(`  - Scripts: ${result.resources.scripts.length}`);
