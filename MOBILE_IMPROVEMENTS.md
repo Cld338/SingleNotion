@@ -90,7 +90,7 @@ setupMobileSidebarToggle() {
 }
 ```
 
-#### 3. `public/css/standard-edit.260313.css`
+#### 3. `public/css/standard-edit.260318.css`
 ```css
 /* 기존 반응형 스타일 강화 */
 @media (max-width: 1023px) { ... }

@@ -26,28 +26,49 @@
    Scrollbar Reset (Override Notion CSS)
    ========================================================= */
 /* Prevent Notion CSS from modifying our scrollbars */
+html, body, * {
+    scrollbar-color: #cbd5e1 transparent !important;
+    scrollbar-width: auto !important;
+}
+
 ::-webkit-scrollbar {
-    width: auto;
-    height: auto;
+    width: 12px !important;
+    height: 12px !important;
 }
 
 ::-webkit-scrollbar-track {
-    background: transparent;
+    background: transparent !important;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
+    background: #cbd5e1 !important;
+    border-radius: 4px !important;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #94a3b8 !important;
 }
 
-/* Firefox scrollbar */
-* {
-    scrollbar-color: #cbd5e1 transparent;
-    scrollbar-width: auto;
+::-webkit-scrollbar-corner {
+    background: transparent !important;
+}
+
+/* Specific element scrollbar resets */
+#notion-viewer::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+#notion-viewer::-webkit-scrollbar-thumb,
+.sidebar::-webkit-scrollbar-thumb {
+    background: #cbd5e1 !important;
+    border-radius: 4px !important;
+}
+
+#notion-viewer::-webkit-scrollbar-thumb:hover,
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8 !important;
 }
 
 /* KaTeX Fonts Load */
