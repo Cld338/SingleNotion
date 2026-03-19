@@ -309,9 +309,252 @@
         });
     }
 
+    /**
+     * Fetches an image and converts it to a data URI (base64)
+     * Uses basic fetch without credentials to avoid CORS issues
+     */
+    async function fetchImageAsDataUri(imageUrl, timeout = 10000, maxSize = 5 * 1024 * 1024) {
+        try {
+            // Only process Notion and CDN domains
+            const url = new URL(imageUrl);
+            const isNotionDomain = ['notion.so', 'notion.site', 'notionusercontent.com', 'amazonaws.com'].some(
+                domain => url.hostname.includes(domain)
+            );
+            
+            if (!isNotionDomain) {
+                console.log('[Notion-PDF-Image] Skipping non-Notion image:', imageUrl.substring(0, 60));
+                return imageUrl; // Return original URL for non-Notion images
+            }
 
+            return new Promise((resolve) => {
+                const xhr = new XMLHttpRequest();
+                
+                // Set timeout
+                xhr.timeout = timeout;
+                
+                // Request as blob for file handling
+                xhr.responseType = 'blob';
+                
+                // DO NOT use withCredentials - it causes CORS issues with Notion's CDN
+                // The image URLs already have signatures/tokens in them for authentication
 
+                xhr.onload = () => {
+                    try {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            const blob = xhr.response;
 
+                            // Check size limit
+                            if (blob.size > maxSize) {
+                                console.warn('[Notion-PDF-Image] Image too large:', blob.size, 'bytes, skipping:', imageUrl.substring(0, 60));
+                                resolve(imageUrl);
+                                return;
+                            }
+
+                            // Convert blob to data URI
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                console.log('[Notion-PDF-Image] Successfully converted image via XHR:', imageUrl.substring(0, 60));
+                                resolve(reader.result);
+                            };
+                            reader.onerror = () => {
+                                console.warn('[Notion-PDF-Image] FileReader error, using original URL:', imageUrl.substring(0, 60));
+                                resolve(imageUrl);
+                            };
+                            reader.readAsDataURL(blob);
+                        } else {
+                            console.warn('[Notion-PDF-Image] Failed to fetch image - status:', xhr.status, imageUrl.substring(0, 60));
+                            resolve(imageUrl);
+                        }
+                    } catch (error) {
+                        console.warn('[Notion-PDF-Image] Error in onload handler:', error.message);
+                        resolve(imageUrl);
+                    }
+                };
+
+                xhr.onerror = () => {
+                    console.warn('[Notion-PDF-Image] XHR error, using original URL:', imageUrl.substring(0, 60));
+                    resolve(imageUrl);
+                };
+
+                xhr.ontimeout = () => {
+                    console.warn('[Notion-PDF-Image] XHR timeout for:', imageUrl.substring(0, 60));
+                    resolve(imageUrl);
+                };
+
+                try {
+                    xhr.open('GET', imageUrl, true);
+                    xhr.send();
+                } catch (error) {
+                    console.warn('[Notion-PDF-Image] Error opening XHR:', error.message);
+                    resolve(imageUrl);
+                }
+            });
+        } catch (error) {
+            console.error('[Notion-PDF-Image] Error processing image URL:', error.message);
+            return imageUrl; // Return original URL on error
+        }
+    }
+
+    /**
+     * Converts a visible image element to data URI using canvas
+     * Useful for images that are already loaded in the DOM
+     */
+    async function imageElementToDataUri(img) {
+        return new Promise((resolve) => {
+            try {
+                // Check if image is actually loaded and visible
+                if (!img.complete || img.naturalWidth === 0) {
+                    console.log('[Notion-PDF-Image] Image not loaded yet, will retry with XHR');
+                    resolve(null);
+                    return;
+                }
+
+                // Create a canvas and draw the image
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                if (!ctx) {
+                    console.warn('[Notion-PDF-Image] Canvas context unavailable');
+                    resolve(null);
+                    return;
+                }
+                
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                
+                try {
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Convert to data URI with appropriate mime type
+                    const mimeType = img.src && img.src.includes('.webp') ? 'image/webp' : 'image/png';
+                    const dataUri = canvas.toDataURL(mimeType);
+                    
+                    if (dataUri && dataUri.startsWith('data:')) {
+                        console.log('[Notion-PDF-Image] Successfully converted image via canvas:', img.src.substring(0, 60));
+                        resolve(dataUri);
+                    } else {
+                        console.warn('[Notion-PDF-Image] Canvas toDataURL failed');
+                        resolve(null);
+                    }
+                } catch (drawError) {
+                    // CORS or tainting issues with canvas
+                    console.warn('[Notion-PDF-Image] Canvas drawImage failed (CORS?):', drawError.message);
+                    resolve(null);
+                }
+            } catch (error) {
+                console.warn('[Notion-PDF-Image] Canvas conversion error:', error.message);
+                resolve(null);
+            }
+        });
+    }
+
+    /**
+     * Embeds all Notion/CDN images in HTML as data URIs
+     * Strategy: 1) Canvas for loaded images, 2) XHR fetch for remaining images, 3) Keep originals as fallback
+     */
+    async function embedImagesAsDataUris(htmlString) {
+        try {
+            if (!htmlString || typeof htmlString !== 'string') {
+                console.warn('[Notion-PDF-Image] Invalid HTML input for image embedding');
+                return htmlString;
+            }
+
+            console.log('[Notion-PDF-Image] Starting image embedding process...');
+
+            // Build a map of current DOM image elements by their src
+            const domImagesByUrl = new Map();
+            const imgElements = document.querySelectorAll('img');
+            
+            console.log('[Notion-PDF-Image] Found', imgElements.length, 'img elements in DOM');
+            
+            for (const img of imgElements) {
+                if (img.src) {
+                    // Normalize URL to match against HTML
+                    const normalizedSrc = img.src;
+                    domImagesByUrl.set(normalizedSrc, img);
+                }
+            }
+
+            // Extract all unique image URLs from HTML string
+            const htmlImageUrls = new Set();
+            const imgSrcRegex = /src=["']([^"']+)["']/gi;
+            let match;
+
+            while ((match = imgSrcRegex.exec(htmlString)) !== null) {
+                const url = match[1];
+                if (url && !url.startsWith('data:')) {
+                    htmlImageUrls.add(url);
+                }
+            }
+
+            if (htmlImageUrls.size === 0) {
+                console.log('[Notion-PDF-Image] No images found in HTML');
+                return htmlString;
+            }
+
+            console.log('[Notion-PDF-Image] Found', htmlImageUrls.size, 'unique images in HTML');
+
+            // Attempt 1: Canvas conversion for images already in DOM
+            console.log('[Notion-PDF-Image] Attempting canvas conversion for loaded images...');
+            const replacements = new Map();
+            const remainingUrls = new Set(htmlImageUrls);
+
+            for (const domUrl of domImagesByUrl.keys()) {
+                if (htmlImageUrls.has(domUrl)) {
+                    const img = domImagesByUrl.get(domUrl);
+                    try {
+                        const dataUri = await imageElementToDataUri(img);
+                        if (dataUri) {
+                            replacements.set(domUrl, dataUri);
+                            remainingUrls.delete(domUrl);
+                        }
+                    } catch (error) {
+                        console.warn('[Notion-PDF-Image] Canvas conversion error for:', domUrl.substring(0, 60));
+                    }
+                }
+            }
+
+            console.log('[Notion-PDF-Image] Canvas succeeded for', replacements.size, 'images,', remainingUrls.size, 'remaining');
+
+            // Attempt 2: XHR fetch for remaining images
+            if (remainingUrls.size > 0) {
+                console.log('[Notion-PDF-Image] Attempting XHR fetch for remaining', remainingUrls.size, 'images...');
+                const imageUrlArray = Array.from(remainingUrls);
+                const batchSize = 3;
+                
+                for (let i = 0; i < imageUrlArray.length; i += batchSize) {
+                    const batch = imageUrlArray.slice(i, i + batchSize);
+                    console.log('[Notion-PDF-Image] XHR batch', Math.floor(i / batchSize) + 1, 'of', Math.ceil(imageUrlArray.length / batchSize));
+
+                    const batchPromises = batch.map(url => 
+                        fetchImageAsDataUri(url).then(dataUri => {
+                            if (dataUri && dataUri !== url && dataUri.startsWith('data:')) {
+                                replacements.set(url, dataUri);
+                            }
+                        }).catch(err => {
+                            console.warn('[Notion-PDF-Image] Batch error for:', url.substring(0, 60), err.message);
+                        })
+                    );
+
+                    await Promise.all(batchPromises);
+                }
+            }
+
+            // Apply replacements to HTML
+            let embeddedHtml = htmlString;
+            for (const [originalUrl, dataUri] of replacements.entries()) {
+                // Multiple passes to handle different quote styles
+                embeddedHtml = embeddedHtml.replace(`src="${originalUrl}"`, `src="${dataUri}"`);
+                embeddedHtml = embeddedHtml.replace(`src='${originalUrl}'`, `src="${dataUri}"`);
+            }
+
+            console.log('[Notion-PDF-Image] Image embedding completed, converted', replacements.size, 'images');
+            return embeddedHtml;
+        } catch (error) {
+            console.error('[Notion-PDF-Image] Error embedding images:', error.message);
+            return htmlString; // Return original HTML on error
+        }
+    }
 
     /**
      * Captures the full page content - identical to pdfService.getPreviewData()
@@ -664,6 +907,16 @@
 
             console.log('[Notion-PDF] HTML generated and converted', { length: htmlWithAbsolutePaths.length });
 
+            // 8.5. 모든 이미지를 data URI로 변환 (서버의 proxy-asset 401 에러 방지)
+            console.log('[Notion-PDF-Image] Embedding images as data URIs to avoid 401 errors...');
+            let htmlWithEmbeddedImages;
+            try {
+                htmlWithEmbeddedImages = await embedImagesAsDataUris(htmlWithAbsolutePaths);
+            } catch (error) {
+                console.error('[Notion-PDF-Image] Image embedding failed, using original HTML:', error.message);
+                htmlWithEmbeddedImages = htmlWithAbsolutePaths;
+            }
+
             // 9. 리소스 추출 (getPreviewData와 동일한 방식)
             console.log('[Notion-PDF] Extracting resources...');
             const resources = {
@@ -904,14 +1157,14 @@
             console.log('[Notion-PDF] Resource paths converted to absolute URLs');
 
             // ⚠️ Debug: 전송 전 style attribute 확인
-            const maskBeforeSend = htmlWithAbsolutePaths.match(/mask:\s*url\([^)]*\)/gi) || [];
+            const maskBeforeSend = htmlWithEmbeddedImages.match(/mask:\s*url\([^)]*\)/gi) || [];
             console.log('[Notion-PDF-DEBUG-SEND] Found', maskBeforeSend.length, 'mask: url() patterns before sending to server');
             maskBeforeSend.slice(0, 2).forEach((match, idx) => {
                 console.log(`[Notion-PDF-DEBUG-SEND] Mask ${idx + 1}:`, match.substring(0, 150));
             });
 
             const capturedData = {
-                html: htmlWithAbsolutePaths,
+                html: htmlWithEmbeddedImages,
                 detectedWidth,
                 resources: resources,
                 metadata: {

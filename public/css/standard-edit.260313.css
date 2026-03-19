@@ -22,14 +22,42 @@
     --page-break-color: var(--primary-color);
 }
 
+/* =========================================================
+   Scrollbar Reset (Override Notion CSS)
+   ========================================================= */
+/* Prevent Notion CSS from modifying our scrollbars */
+::-webkit-scrollbar {
+    width: auto;
+    height: auto;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Firefox scrollbar */
+* {
+    scrollbar-color: #cbd5e1 transparent;
+    scrollbar-width: auto;
+}
+
 /* KaTeX Fonts Load */
-@font-face { font-family: 'KaTeX_AMS'; src: url('/katex/fonts/KaTeX_AMS-Regular.66c67820.woff2') format('woff2'); font-weight: normal; font-style: normal; font-display: fallback; }
+/* @font-face { font-family: 'KaTeX_AMS'; src: url('/katex/fonts/KaTeX_AMS-Regular.66c67820.woff2') format('woff2'); font-weight: normal; font-style: normal; font-display: fallback; }
 @font-face { font-family: 'KaTeX_Main'; src: url('/katex/fonts/KaTeX_Main-Regular.f8a7f19f.woff2') format('woff2'); font-weight: normal; font-style: normal; font-display: fallback; }
 @font-face { font-family: 'KaTeX_Main'; src: url('/katex/fonts/KaTeX_Main-Italic.65297062.woff2') format('woff2'); font-weight: normal; font-style: italic; font-display: fallback; }
 @font-face { font-family: 'KaTeX_Math'; src: url('/katex/fonts/KaTeX_Math-Italic.d8b7a801.woff2') format('woff2'); font-weight: normal; font-style: italic; font-display: fallback; }
 @font-face { font-family: 'KaTeX_Caligraphic'; src: url('/katex/fonts/KaTeX_Caligraphic-Regular.08d95d99.woff2') format('woff2'); font-weight: normal; font-style: normal; font-display: fallback; }
 @font-face { font-family: 'KaTeX_Size1'; src: url('/katex/fonts/KaTeX_Size1-Regular.82ef26dc.woff2') format('woff2'); font-weight: normal; font-style: normal; font-display: fallback; }
-@font-face { font-family: 'KaTeX_Size2'; src: url('/katex/fonts/KaTeX_Size2-Regular.95a1da91.woff2') format('woff2'); font-weight: normal; font-style: normal; font-display: fallback; }
+@font-face { font-family: 'KaTeX_Size2'; src: url('/katex/fonts/KaTeX_Size2-Regular.95a1da91.woff2') format('woff2'); font-weight: normal; font-style: normal; font-display: fallback; } */
 
 /* =========================================================
    Base Layout
