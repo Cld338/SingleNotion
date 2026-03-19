@@ -126,6 +126,10 @@ class CSSTemplates {
             .notion-floating-table-of-contents {
                 height: 1px !important;
             }
+
+            header {
+                display: none !important;
+            }
             
             div[role="table"][aria-label="Page properties"] + div,
             div[role="table"][aria-label="페이지 속성"] + div

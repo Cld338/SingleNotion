@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Notion to PDF - Direct Convert",
+  "name": "Single Notion",
   "version": "0.1.0",
   "description": "Capture Notion page content and convert to PDF directly from your browser",
   "permissions": [
@@ -13,7 +13,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Notion to PDF"
+    "default_title": "Single Notion"
   },
   "background": {
     "service_worker": "background.js"
@@ -32,8 +32,8 @@
     }
   ],
   "icons": {
-    "16": "/images/favicon.ico",
-    "48": "/images/favicon.ico",
-    "128": "/images/favicon.ico"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }

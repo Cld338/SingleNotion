@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Notion to PDF</title>
     <style>
+        :root {
+            --notion-text: #37352f;
+            --notion-gray: #787774;
+            --notion-blue: #2383e2;
+            --notion-blue-hover: #1d6fc0;
+            --notion-bg: #ffffff;
+            --notion-bg-hover: #efefef;
+            --notion-border: #e9e9e7;
+            --border-radius: 6px;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,14 +23,15 @@
         }
 
         body {
-            width: 350px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: white;
-            color: #333;
+            width: 320px;
+            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+            background: var(--notion-bg);
+            color: var(--notion-text);
+            -webkit-font-smoothing: antialiased;
         }
 
         .container {
-            padding: 24px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
             gap: 16px;
@@ -27,87 +39,84 @@
 
         .header {
             display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-
-        .header h1 {
-            font-size: 18px;
-            font-weight: 700;
-            color: #1a202c;
-        }
-
-        .header p {
-            font-size: 13px;
-            color: #718096;
-            margin-top: 4px;
-            line-height: 1.4;
-        }
-
-        .content {
-            display: flex;
-            flex-direction: column;
+            align-items: flex-start;
             gap: 12px;
         }
 
-        .status-box {
-            padding: 12px;
+        .icon-box {
+            width: 32px;
+            height: 32px;
+            background: var(--notion-bg);
+            border: 1px solid var(--notion-border);
             border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .header-text h1 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--notion-text);
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+
+        .header-text p {
+            font-size: 13px;
+            color: var(--notion-gray);
+            line-height: 1.4;
+        }
+
+        .status-box {
+            padding: 10px 12px;
+            border-radius: var(--border-radius);
             font-size: 13px;
             display: none;
             align-items: center;
             gap: 8px;
+            line-height: 1.4;
         }
 
         .status-box.info {
-            background: #e6f3ff;
-            color: #0056b3;
-            display: flex;
+            background: #f0f6fc;
+            color: #0969da;
+            border: 1px solid #d0e8ff;
         }
 
         .status-box.success {
-            background: #d4edda;
-            color: #155724;
-            display: flex;
+            background: #dafbe1;
+            color: #1a7f37;
+            border: 1px solid #bceabf;
         }
 
         .status-box.error {
-            background: #f8d7da;
-            color: #721c24;
-            display: flex;
-        }
-
-        .spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid #0056b3;
-            border-top: 2px solid transparent;
-            border-radius: 50%;
-            animation: spin 0.6s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+            background: #ffebe9;
+            color: #cf222e;
+            border: 1px solid #ffd8d6;
         }
 
         .button-group {
             display: flex;
             gap: 8px;
-            margin-top: 8px;
         }
 
         button {
             flex: 1;
-            padding: 12px 20px;
+            padding: 10px 14px;
             border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
+            border-radius: var(--border-radius);
+            font-size: 13px;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s ease;
-            outline: none;
+            transition: background 0.15s ease, opacity 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-family: inherit;
         }
 
         button:disabled {
@@ -116,45 +125,67 @@
         }
 
         .btn-primary {
-            background: #0056b3;
+            background: var(--notion-blue);
             color: white;
         }
 
         .btn-primary:hover:not(:disabled) {
-            background: #004085;
-            box-shadow: 0 2px 8px rgba(0, 86, 179, 0.3);
-        }
-
-        .btn-primary:active:not(:disabled) {
-            background: #003060;
+            background: var(--notion-blue-hover);
         }
 
         .btn-secondary {
-            background: #e2e8f0;
-            color: #333;
+            background: white;
+            color: var(--notion-text);
+            border: 1px solid var(--notion-border);
         }
 
         .btn-secondary:hover:not(:disabled) {
-            background: #cbd5e0;
+            background: var(--notion-bg-hover);
         }
 
         .info-text {
             font-size: 12px;
-            color: #718096;
+            color: var(--notion-gray);
             line-height: 1.5;
-            margin-top: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            background: #f7f7f5;
+            padding: 12px;
+            border-radius: var(--border-radius);
         }
 
-        .hidden {
-            display: none !important;
+        .info-text svg {
+            min-width: 14px;
+            margin-top: 2px;
+            color: #eab308;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📄 Notion to PDF</h1>
-            <p>현재 페이지를 PDF로 변환하세요</p>
+            <div class="icon-box">
+                <img src="icons/icon128.png" alt="Single Notion" width="24" height="24" />
+            </div>
+            <div class="header-text">
+                <h1>Single Notion</h1>
+                <p>노션 문서를 PDF로 변환하세요</p>
+            </div>
         </div>
 
         <div class="content">
@@ -162,23 +193,23 @@
 
             <div class="button-group">
                 <button id="capture-btn" class="btn-primary">
-                    캡처 & 전송
-                </button>
-                <button id="settings-btn" class="btn-secondary">
-                    설정
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <span>캡처 & 전송</span>
                 </button>
             </div>
 
-            <div class="info-text">
-                💡 Notion 페이지의 콘텐츠를 캡처하여 서버로 전송하면, 편집 화면에서 바로 PDF로 변환할 수 있습니다.
-            </div>
-            
-            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
-                <details style="font-size: 11px; color: #666;">
-                    <summary style="cursor: pointer; color: #0056b3; margin-bottom: 8px;">🔍 디버그 정보 보기</summary>
-                    <div id="debug-logs" style="background: #f5f5f5; padding: 8px; border-radius: 4px; max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 10px; line-height: 1.3; white-space: pre-wrap; word-wrap: break-word;"></div>
-                </details>
-            </div>
+            <!-- <div class="info-text">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <span>Notion 페이지의 콘텐츠를 캡처하여 서버로 전송하면, 편집 화면에서 바로 PDF로 변환할 수 있습니다.</span>
+            </div> -->
         </div>
     </div>
 

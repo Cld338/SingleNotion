@@ -47,6 +47,13 @@ class StandardEditApp {
             
             if (this.formatSelect) {
                 this.formatSelect.value = this.format;
+                // Extension에서 들어온 경우 SINGLE 포맷 옵션 비활성화
+                if (this.source === 'extension') {
+                    const singleOption = Array.from(this.formatSelect.options).find(opt => opt.value === 'SINGLE');
+                    if (singleOption) {
+                        singleOption.disabled = true;
+                    }
+                }
             }
 
             const params = new URLSearchParams(window.location.search);
@@ -757,6 +764,14 @@ class StandardEditApp {
 
     onFormatChange(newFormat) {
         if (this.isPrinting) return;
+        
+        // Extension에서 들어온 경우 SINGLE 포맷 선택 차단
+        if (this.source === 'extension' && newFormat === 'SINGLE') {
+            Logger.log('Extension에서는 단일 페이지 포맷이 지원되지 않습니다.', 'warn');
+            this.formatSelect.value = this.format; // 이전 포맷으로 복구
+            return;
+        }
+        
         Logger.log(`포맷 변경: ${this.format} -> ${newFormat}`, 'info');
         this.format = newFormat;
         
