@@ -6,7 +6,7 @@
 (function() {
     // Configuration - default values
     let CONFIG = {
-        SERVER_URL: 'http://localhost:3001'
+        SERVER_URL: 'https://notion-pdf.cld338.me'
     };
 
     // Promise-based config loader

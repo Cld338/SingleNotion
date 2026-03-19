@@ -10,7 +10,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
         console.log('[Notion-PDF] Extension installed');
         // Open welcome page
-        chrome.tabs.create({ url: 'http://localhost:3001/how-to-use' });
+        chrome.tabs.create({ url: 'https://notion-pdf.cld338.me/how-to-use' });
     } else if (details.reason === 'update') {
         console.log('[Notion-PDF] Extension updated');
     }
@@ -23,7 +23,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // You can add background-specific message handling here if needed
     if (request.action === 'getConfig') {
         sendResponse({
-            serverUrl: 'http://localhost:3001'
+            serverUrl: 'https://notion-pdf.cld338.me'
         });
     }
 });

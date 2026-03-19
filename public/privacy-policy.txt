@@ -1,36 +1,42 @@
-# 개인정보처리방침 (Privacy Policy)
+# Privacy Policy for Single Notion
 
-Single Notion(이하 "회사")은 이용자의 개인정보를 중요시하며, "개인정보 보호법", "정보통신망 이용촉진 및 정보보호 등에 관한 법률" 등 관련 법령을 준수하고 있습니다. 회사는 본 개인정보처리방침을 통하여 이용자가 제공하는 개인정보가 어떠한 용도와 방식으로 이용되고 있으며, 개인정보 보호를 위해 어떠한 조치가 취해지고 있는지 알려드립니다.
+**Effective Date: March 2026**
 
-**1. 수집하는 개인정보 항목 및 수집 방법**
-회사는 별도의 회원가입 없이 서비스를 제공하고 있습니다. 단, 서비스 제공 및 원활한 운영, 접속 통계 분석을 위해 아래와 같은 정보가 자동으로 수집될 수 있습니다.
-- 수집 항목: 변환 요청된 노션(Notion) URL, 접속 IP 주소, 쿠키(Cookie), 방문 일시, 브라우저 및 운영체제 정보
-- 수집 방법: 웹사이트 접속 및 변환 기능 실행 시 생성 정보 자동 수집 도구(Google Analytics 등)를 통한 수집
+Single Notion ("the Extension", "we", "us", or "our") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, process, and protect your data when you use our Chrome Extension. We strictly adhere to the Chrome Web Store Developer Program Policies, including the requirements for Limited Use.
 
-**2. 개인정보의 수집 및 이용 목적**
-회사는 수집한 정보를 다음의 목적을 위해 이용합니다.
-- 서비스 제공: URL 기반의 렌더링 및 PDF 파일 변환 기능 제공
-- 서비스 개선: 접속 빈도 파악, 서비스 이용에 대한 통계 분석, 시스템 에러 추적 및 성능 최적화
+## 1. Information We Collect and How We Collect It
 
-**3. 원본 데이터 및 결과물 처리**
-1. **데이터 미보관 원칙:** 회사는 이용자가 변환을 위해 입력한 노션 페이지의 본문 데이터(텍스트, 이미지 등)를 회사의 데이터베이스에 저장하지 않습니다.
-2. **파일 자동 파기:** 변환이 완료되어 생성된 PDF 파일은 이용자의 다운로드 제공 목적을 위해서만 임시 생성되며, 시스템 설정에 따라 일정 시간(예: [1시간]) 경과 후 서버에서 자동으로 영구 삭제됩니다.
+The Extension does not track your browsing history in the background or collect data continuously. Data extraction occurs **only when you explicitly click the "Capture & Send" (캡처 & 전송) button** in the Extension popup.
 
-**4. 개인정보의 제3자 제공 및 위탁**
-회사는 원칙적으로 이용자의 개인정보를 외부에 제공하지 않습니다. 다만, 서비스 방문자 통계 분석을 위해 Google Analytics와 같은 외부 분석 도구를 사용하고 있으며, 이 과정에서 비식별화된 정보가 해당 서비스 제공자에게 전달될 수 있습니다.
-- 수탁자: Google LLC (Google Analytics)
-- 위탁 업무: 웹사이트 방문자 통계 및 분석
+* **Data Collected:** The Document Object Model (DOM) data, text, image URLs, page layout, and CSS styles of the currently active Notion page (`notion.so` or `notion.site`).
+* **Data Not Collected:** Passwords, payment information, browsing activity on non-Notion websites, and Personally Identifiable Information (PII) such as IP addresses.
 
-**5. 개인정보의 파기절차 및 방법**
-이용자의 정보는 원칙적으로 개인정보의 수집 및 이용 목적이 달성되면 지체 없이 파기합니다. 전자적 파일 형태로 저장된 개인정보는 기록을 재생할 수 없는 기술적 방법을 사용하여 삭제합니다. (관련 법령에 따라 일정 기간 보존이 필요한 접속 로그 등의 정보는 해당 기간 경과 후 파기됩니다.)
+## 2. Purpose of Data Collection (Single Purpose)
 
-**6. 이용자의 권리 및 행사 방법**
-이용자는 언제든지 등록되어 있는 자신의 개인정보에 대한 열람, 정정, 삭제, 처리정지를 요구할 수 있습니다. 개인정보 보호책임자에게 서면, 전화 또는 이메일로 연락하시면 지체 없이 조치하겠습니다.
+The collected page content is used for one single, explicit purpose: **rendering and converting your Notion page into a PDF document**. 
+We do not use your data for marketing, targeted advertising, profiling, or any other unrelated purposes. 
 
-**7. 개인정보 보호책임자**
-회사는 개인정보 처리에 관한 업무를 총괄해서 책임지고, 개인정보 처리와 관련한 이용자의 불만처리 및 피해구제 등을 위하여 아래와 같이 개인정보 보호책임자를 지정하고 있습니다.
+## 3. Data Transmission and Storage
 
-- 오지훈
-- 이메일: jihuno291@gmail.com
+Since the Extension cannot perform PDF conversion locally within the browser, the captured data is securely transmitted to our dedicated server (`https://notion-pdf.cld338.me`) using HTTPS encryption.
 
-- 부칙: 본 개인정보처리방침은 2026년 3월 15일부터 적용됩니다.
+* **Temporary Processing:** The transmitted data is held in the server's temporary memory solely for the duration of the conversion process and your active editing session.
+* **Automatic Deletion:** Immediately after the session expires or the conversion process is completed, all captured page data and the resulting PDF files are completely and permanently deleted from our server. We do not archive or maintain persistent backups of your Notion content.
+
+## 4. Third-Party Data Sharing
+
+We do not sell, rent, trade, or share your data with any third parties, including advertisers or marketing partners. The data is processed exclusively within the secure cloud infrastructure directly managed by us for the sole purpose of providing the PDF conversion service.
+
+## 5. Required Permissions
+
+To provide its core functionality, the Extension requests the following permissions in its `manifest.json`:
+* **Host Permissions (`https://*.notion.so/*`, `https://*.notion.site/*`):** Required to access and capture the HTML/CSS content of your active Notion pages for PDF conversion. The Extension cannot and will not access content on any other websites.
+
+## 6. Your Rights and Control
+
+You maintain full control over your data. You can disable, uninstall, or remove the Single Notion extension at any time through the Chrome Extension Manager (`chrome://extensions/`). Uninstalling the Extension immediately revokes all of its access and permissions.
+
+## 7. Contact Us
+
+If you have any questions, concerns, or requests regarding this Privacy Policy or how your data is handled, please contact us at:
+* **Email:** [support@cld338.me]

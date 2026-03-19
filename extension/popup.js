@@ -35,7 +35,6 @@ console.log('[Notion-PDF] Server URL:', CONFIG.SERVER_URL);
 
 const Elements = {
     captureBtn: document.getElementById('capture-btn'),
-    settingsBtn: document.getElementById('settings-btn'),
     statusBox: document.getElementById('status-box'),
 };
 
@@ -193,5 +192,4 @@ async function handleCapture() {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     Elements.captureBtn.addEventListener('click', handleCapture);
-    Elements.settingsBtn.addEventListener('click', handleSettings);
 });
