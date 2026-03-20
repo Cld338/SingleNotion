@@ -5,9 +5,19 @@
 
 class CSSTemplates {
     /**
-     * 레이아웃 고정 CSS를 생성합니다
-     * @param {Array} layoutElements - 레이아웃 요소들
-     * @returns {string} CSS 문자열
+     * 동적 레이아웃 요소들의 너비를 고정하는 CSS를 생성합니다
+     * 
+     * PDF 렌더링 시 Notion의 반응형 레이아웃이 예상과 다르게 변형되는 것을 방지하기 위해,
+     * 각 요소의 현재 너비/높이를 고정된 픽셀 값으로 변환합니다.
+     * 이미지나 에셋 요소는 높이도 함께 고정되며, 다른 요소는 너비만 고정됩니다.
+     * 
+     * @param {Array<HTMLElement>} layoutElements - 너비를 고정할 DOM 요소들의 배열
+     * @returns {string} 생성된 CSS 문자열
+     * 
+     * 예시:
+     *   - 요소의 dataset에 고유한 data-sn-freeze ID를 할당
+     *   - 각 요소마다 width, max-width, min-width를 동일한 값으로 설정
+     *   - 이미지/에셋 요소는 height도 함께 고정
      */
     static generateFreezingCSS(layoutElements) {
         let freezeCSS = "";
@@ -27,7 +37,19 @@ class CSSTemplates {
     }
 
     /**
-     * 기본 KaTeX 렌더링 CSS
+     * KaTeX 수학 공식 렌더링을 위한 기본 CSS를 반환합니다
+     * 
+     * KaTeX는 LaTeX 수식을 웹에서 렌더링하는 라이브러리입니다.
+     * 이 CSS는 PDF 출력 시 수식이 올바르게 표시되도록 스타일을 정의합니다.
+     * 
+     * 주요 기능:
+     *   - 인라인/디스플레이 수식의 정렬 및 간격 설정
+     *   - 글꼴 부드러움 처리 (antialiasing, font-smoothing)
+     *   - MathML과 주석 요소 숨김 (시각적 중복 제거)
+     *   - KaTeX 내부 요소들(.base, .strut, .mord 등)의 정확한 배치
+     *   - SVG 및 폰트 렌더링 최적화
+     * 
+     * @returns {string} KaTeX 관련 CSS 문자열
      */
     static get KATEX_RENDERING_CSS() {
         return `
@@ -109,7 +131,19 @@ class CSSTemplates {
     }
 
     /**
-     * 기본 레이아웃 CSS
+     * PDF 렌더링을 위한 기본 레이아웃 CSS를 반환합니다
+     * 
+     * 이 CSS는 Notion 페이지를 PDF로 변환할 때 불필요한 요소를 숨기고
+     * 페이지의 콘텐츠 영역만 표시하도록 레이아웃을 정리합니다.
+     * 
+     * 주요 기능:
+     *   - 사이드바, 상단 네비게이션 바, 도움말 버튼 등 UI 요소 제거
+     *   - 페이지 속성 테이블 숨김
+     *   - 스크롤바 제거
+     *   - SVG 및 콘텐츠 요소의 불필요한 border 제거
+     *   - 높이를 자동으로 조정하여 모든 콘텐츠가 보이도록 설정
+     * 
+     * @returns {string} 기본 레이아웃 CSS 문자열
      */
     static get BASE_LAYOUT_CSS() {
         return `
@@ -171,7 +205,17 @@ class CSSTemplates {
     }
 
     /**
-     * 코드 블록 CSS
+     * 코드 블록 표시를 위한 CSS를 반환합니다
+     * 
+     * Notion 페이지의 코드 블록이 PDF에서 올바르게 표시되도록 스타일을 정의합니다.
+     * 긴 코드 라인의 줄바꿈 처리와 들여쓰기 공백 유지가 중요합니다.
+     * 
+     * 주요 기능:
+     *   - 코드 텍스트의 공백과 줄바꿈을 원본 그대로 유지 (pre-wrap)
+     *   - 모노스페이스 글꼴 강제 적용 (Consolas, Monaco, Courier New)
+     *   - 긴 코드 라인이 자동으로 줄바꿈되도록 설정
+     * 
+     * @returns {string} 코드 블록 관련 CSS 문자열
      */
     static get CODE_BLOCK_CSS() {
         return `
@@ -184,9 +228,31 @@ class CSSTemplates {
     }
 
     /**
-     * 동적 레이아웃 CSS를 생성합니다
-     * @param {Object} params - 레이아웃 매개변수
-     * @returns {string} CSS 문자열
+     * 감지된 페이지 크기와 패딩을 바탕으로 동적 레이아웃 CSS를 생성합니다
+     * 
+     * PDF의 실제 너비(detectedWidth)에 맞추어 Notion 요소들의 너비와 패딩을 조정합니다.
+     * 각 매개변수는 페이지 분석 단계에서 계산되며, 이 함수는 해당 값들을 CSS로 변환합니다.
+     * 또한 사용자 선택사항에 따라 제목, 배너, 태그, 댓글 등의 표시 여부를 조절합니다.
+     * 
+     * 주요 기능:
+     *   - 콘텐츠 영역의 너비를 PDF 페이지 너비에 맞춤
+     *   - 상단/하단/좌측/우측 패딩 값을 적용
+     *   - 특정 인덱스의 레이아웃 요소에만 패딩 적용
+     *   - 제목, 배너, 태그, 댓글 표시 여부에 따라 display 속성 조절
+     * 
+     * @param {Object} params - 레이아웃 매개변수 객체
+     * @param {number} params.detectedWidth - 감지된 PDF 페이지 콘텐츠 너비 (픽셀)
+     * @param {number} params.padTop - 상단 패딩 (픽셀)
+     * @param {number} params.padBottom - 하단 패딩 (픽셀)
+     * @param {number} params.padLeft - 좌측 패딩 (픽셀)
+     * @param {number} params.padRight - 우측 패딩 (픽셀)
+     * @param {number} params.padTopIdx - 패딩을 적용할 레이아웃 요소의 인덱스
+     * @param {number} params.totalLayoutWidth - 전체 레이아웃의 총 너비 (픽셀)
+     * @param {boolean} params.includeTitle - 페이지 제목 포함 여부
+     * @param {boolean} params.includeBanner - 페이지 배너 포함 여부
+     * @param {boolean} params.includeTags - 페이지 태그 포함 여부
+     * @param {boolean} params.includeDiscussion - 댓글 섹션 포함 여부
+     * @returns {string} 생성된 동적 CSS 문자열
      */
     static generateDynamicLayoutCSS({
         detectedWidth,
@@ -249,9 +315,28 @@ class CSSTemplates {
     }
 
     /**
-     * 완전한 PDF 렌더링 CSS를 생성합니다
-     * @param {Object} params - 모든 CSS 유틸 매개변수
-     * @returns {string} 완전한 CSS 문자열
+     * 모든 CSS 템플릿을 조합하여 완전한 PDF 렌더링용 CSS를 생성합니다
+     * 
+     * 이 함수는 기본 레이아웃, 코드 블록, KaTeX 렌더링, 동적 레이아웃 CSS를
+     * 순서대로 결합하여 최종 CSS 문자열을 생성합니다.
+     * 이렇게 생성된 CSS는 HTML의 <style> 태그에 직접 삽입되어 PDF 렌더링을 제어합니다.
+     * 
+     * 실행 순서:
+     *   1. 기본 레이아웃 CSS (BASE_LAYOUT_CSS) - UI 요소 제거
+     *   2. 코드 블록 CSS (CODE_BLOCK_CSS) - 코드 표시 형식
+     *   3. KaTeX 렌더링 CSS (KATEX_RENDERING_CSS) - 수식 렌더링
+     *   4. 동적 레이아웃 CSS (generateDynamicLayoutCSS) - 페이지별 커스텀 레이아웃
+     * 
+     * @param {Object} params - 동적 레이아웃 생성을 위한 모든 매개변수
+     *                         (generateDynamicLayoutCSS 함수의 params와 동일)
+     * @returns {string} 모든 스타일이 포함된 완전한 CSS 문자열
+     * 
+     * 예시 사용:
+     *   const cssString = CSSTemplates.generateCompletePDFStyles({
+     *     detectedWidth: 750,
+     *     padTop: 20,
+     *     // ... 다른 매개변수들
+     *   });
      */
     static generateCompletePDFStyles(params) {
         const baseCSS = CSSTemplates.BASE_LAYOUT_CSS;

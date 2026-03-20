@@ -7,14 +7,44 @@ const PageEvaluationScripts = require('../utils/pageEvaluationScripts');
 const { log } = require('console');
 
 class PdfService {
-    // 상대 경로를 절대 경로로 변환
+    /**
+     * HTML 내의 모든 상대 경로를 절대 경로로 변환합니다
+     * 
+     * Notion 페이지에서 추출한 HTML에 포함된 이미지, 링크, 스크립트 등의
+     * 상대 경로(예: ./image.png, ../resource/style.css)를 절대 URL로 변환합니다.
+     * base URL을 기준으로 모든 경로를 정규화합니다.
+     * 
+     * @param {string} html - 변환할 HTML 문자열
+     * @param {string} baseUrl - 기준이 될 Notion 페이지의 URL
+     * @returns {string} 모든 상대 경로가 절대 경로로 변환된 HTML 문자열
+     * 
+     * 예시:
+     *   입력: <img src="image.png"> with baseUrl="https://notion.so/page"
+     *   출력: <img src="https://notion.so/image.png">
+     */
     convertRelativeToAbsolutePaths(html, baseUrl) {
         return URLPathConverter.convertAll(html, baseUrl);
     }
 
     /**
-     * CSS 텍스트 내의 url() 함수 경로를 proxy-asset으로 변환 (서버 측)
-     * 예: url("https://notion.site/icon.svg") → url('/proxy-asset?url=...')
+     * CSS 텍스트 내의 url() 함수 경로를 proxy-asset 요청으로 변환합니다 (서버 측)
+     * 
+     * CSS 내 url() 함수의 외부 리소스 경로를 서버의 proxy-asset 엔드포인트로 변환하여,
+     * PDF 생성 시 모든 리소스가 프록시를 통해 로드되도록 합니다.
+     * 이미 프록시된 경로나 data URI는 변경하지 않습니다.
+     * 
+     * 주요 기능:
+     *   - 절대 URL(http://, https://, //) → /proxy-asset?url=... 변환
+     *   - 이미 프록시된 경로는 그대로 유지
+     *   - data URI는 변경 없음 (인라인 리소스)
+     *   - 변환된 각 경로를 로깅
+     * 
+     * @param {string} cssText - CSS 텍스트 (스타일 태그 내용 또는 속성값)
+     * @returns {string} url() 경로가 프록시로 변환된 CSS 텍스트
+     * 
+     * 예시:
+     *   입력: url("https://notion.site/icon.svg")
+     *   출력: url('/proxy-asset?url=https%3A%2F%2Fnotion.site%2Ficon.svg')
      */
     convertCssUrlsToProxyAsset(cssText) {
         if (!cssText) return cssText;
@@ -43,7 +73,45 @@ class PdfService {
         );
     }
 
-    // 노션 페이지의 콘텐츠 너비 및 HTML 측정 (미리보기용)
+    /**
+     * Notion 페이지를 분석하여 미리보기용 데이터를 수집합니다
+     * 
+     * 주어진 Notion 페이지 URL을 Puppeteer 브라우저로 열고, 페이지의 콘텐츠를
+     * 완전히 로드할 때까지 대기한 후 다음 정보를 수집합니다:
+     *   - 감지된 콘텐츠 너비
+     *   - HTML 코드
+     *   - 모든 리소스 (CSS, 이미지, 폰트, 스크립트, KaTeX 등)
+     *   - 디버그 정보
+     * 
+     * 로딩 완료 조건:
+     *   1. 모든 CSS 스타일시트 로드 완료
+     *   2. 웹 폰트 로드 완료
+     *   3. KaTeX/MathJax 수식 렌더링 완료
+     *   4. Notion 토글 블록 모두 펼침
+     *   5. CSS 애니메이션 및 렌더링 완료
+     * 
+     * 수집되는 리소스:
+     *   - CSS 링크 및 인라인 스타일
+     *   - 이미지 (img, picture 태그)
+     *   - 아이콘 (favicon, apple-touch-icon)
+     *   - 웹 폰트
+     *   - 스크립트 (외부/인라인)
+     *   - KaTeX 리소스
+     *   - 비디오/오디오 미디어
+     *   - 기타 자산 (_assets 폴더)
+     * 
+     * 모든 리소스 경로는 절대 경로로 변환됩니다.
+     * 
+     * @param {string} url - 분석할 Notion 페이지의 URL
+     * @param {Object} options - 미리보기 옵션
+     * @returns {Promise<Object>} 수집된 미리보기 데이터
+     *   - detectedWidth: {number} 감지된 페이지 콘텐츠 너비 (픽셀)
+     *   - html: {string} 추출된 HTML 코드
+     *   - resources: {Object} 수집된 모든 리소스
+     *   - debug: {Object} 디버그 정보 (리소스 개수 등)
+     * 
+     * @throws {Error} 페이지 로드 실패 또는 기타 브라우저 에러
+     */
     async getPreviewData(url, options={}) {
         const browser = await browserPool.acquire();
         let page = null;
@@ -739,6 +807,49 @@ class PdfService {
         }
     }
 
+    /**
+     * Notion 페이지를 PDF로 변환하여 스트림으로 반환합니다
+     * 
+     * 주어진 Notion 페이지 URL을 열고, 사용자 옵션에 따라 페이지를 렌더링한 후
+     * PDF 형식으로 생성합니다. 생성된 PDF는 Node.js 읽기 스트림으로 반환되어
+     * 클라이언트에 직접 스트리밍할 수 있습니다.
+     * 
+     * PDF 생성 전 처리:
+     *   1. 모든 Notion 토글 블록 펼치기
+     *   2. KaTeX CSS 주입 (수식 렌더링 개선)
+     *   3. 콘텐츠 너비 자동 감지
+     *   4. 동적 레이아웃 CSS 생성 및 적용
+     *   5. 레이아웃 고정 CSS 생성 (반응형 레이아웃 방지)
+     *   6. 최종 뷰포트 크기 계산
+     *   7. KaTeX 렌더링 검증
+     * 
+     * 옵션 처리:
+     *   - includeBanner, includeTitle, includeTags, includeDiscussion: 페이지 요소 표시 여부
+     *   - marginTop, marginBottom, marginLeft, marginRight: PDF 페이지 여백
+     *   - pageWidth: PDF 페이지 너비
+     *   - screenshotPath: 스크린샷 저장 경로 (선택사항)
+     * 
+     * PDF 스트림은 자동으로 메모리를 정리하고, 에러 발생 시에도 리소스를 정리합니다.
+     * 
+     * @param {string} url - 변환할 Notion 페이지의 URL
+     * @param {Object} options - PDF 생성 옵션
+     * @param {boolean} [options.includeBanner=true] - 페이지 배너 포함 여부
+     * @param {boolean} [options.includeTitle=true] - 페이지 제목 포함 여부
+     * @param {boolean} [options.includeTags=true] - 페이지 태그 포함 여부
+     * @param {boolean} [options.includeDiscussion=false] - 댓글 섹션 포함 여부
+     * @param {number} [options.marginTop=0] - 상단 여백 (픽셀)
+     * @param {number} [options.marginBottom=0] - 하단 여백 (픽셀)
+     * @param {number} [options.marginLeft=0] - 좌측 여백 (픽셀)
+     * @param {number} [options.marginRight=0] - 우측 여백 (픽셀)
+     * @param {number} [options.pageWidth] - PDF 페이지 너비 (픽셀, 미지정 시 자동)
+     * @param {string} [options.screenshotPath] - 디버그용 스크린샷 저장 경로
+     * 
+     * @returns {Promise<Object>} PDF 생성 결과
+     *   - stream: {ReadableStream} PDF 데이터의 읽기 스트림
+     *   - detectedWidth: {number} 감지된 페이지 너비
+     * 
+     * @throws {Error} PDF 생성 실패 또는 페이지 로드 실패
+     */
     async generatePdf(url, options) {
         const browser = await browserPool.acquire();
         let page = null;
@@ -1239,7 +1350,26 @@ class PdfService {
         }
     }
 
-    // ✅ 새 메서드: 페이지 리소스 명시적 정리
+    /**
+     * Puppeteer 페이지 인스턴스의 리소스를 명시적으로 정리합니다
+     * (내부 유틸리티 메서드)
+     * 
+     * 페이지 렌더링이 완료되거나 에러가 발생한 후 메모리 누수를 방지하기 위해
+     * 페이지의 모든 이벤트 리스너, 캐시, DOM 내용을 정리하고 페이지를 종료합니다.
+     * 
+     * 정리 단계:
+     *   1. 모든 이벤트 리스너 제거 (request, response, console 등)
+     *   2. 페이지 컨텍스트에서 전역 변수 및 DOM 내용 정리
+     *   3. 페이지 인스턴스 종료 (closed 상태로 변경)
+     * 
+     * 정리 중 에러가 발생해도 후속 단계를 계속 수행하여 최대한 리소스를 정리합니다.
+     * 
+     * @param {Page|null} page - Puppeteer 페이지 인스턴스
+     *                           null이면 아무 작업도 수행하지 않음
+     * @returns {Promise<void>}
+     * 
+     * @private
+     */
     async _cleanupPageResources(page) {
         if (!page) return;
 
@@ -1268,6 +1398,25 @@ class PdfService {
         }
     }
 
+    /**
+     * PDF 서비스를 종료하고 모든 리소스를 정리합니다
+     * 
+     * 서버 종료 시 또는 서비스가 더 이상 필요 없을 때 호출되어야 합니다.
+     * 브라우저 풀의 모든 브라우저 인스턴스를 정리합니다.
+     * 
+     * 정리 단계:
+     *   1. 브라우저 풀 드레인 (진행 중인 작업 완료 대기)
+     *   2. 브라우저 풀 초기화 (모든 브라우저 인스턴스 종료)
+     * 
+     * 에러 발생 시에도 경고를 로깅하고 계속 진행하여 최대한의 정리를 시도합니다.
+     * 
+     * @returns {Promise<void>}
+     * 
+     * 사용 예시:
+     *   const pdfService = require('./pdfService');
+     *   // ... 서비스 사용 ...
+     *   await pdfService.close(); // 서버 종료 전 호출
+     */
     async close() {
         try {
             await browserPool.drain();
