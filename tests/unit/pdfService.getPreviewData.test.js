@@ -115,7 +115,7 @@ describe('PdfService - getPreviewData()', () => {
         test('options가 없어도 기본값으로 정상 작동', async () => {
             setupMocks();
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result).toBeDefined();
             expect(mockPage.evaluate).toHaveBeenCalled();
@@ -124,7 +124,7 @@ describe('PdfService - getPreviewData()', () => {
         test('브라우저 페이지가 정상적으로 초기화됨', async () => {
             setupMocks();
 
-            await PdfService.getPreviewData('https://notion.so/page');
+            await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(browserPool.acquire).toHaveBeenCalled();
             expect(mockBrowser.newPage).toHaveBeenCalled();
@@ -163,7 +163,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: {}
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.html).toBe(expectedHtml);
         });
@@ -186,7 +186,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: {}
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.detectedWidth).toBe(1200);
         });
@@ -209,7 +209,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: {}
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.html).toBe('');
             expect(result).toBeDefined();
@@ -240,7 +240,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { stylesheetLinks: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.cssLinks).toHaveLength(2);
             expect(result.resources.cssLinks[0].href).toBe(cssResources[0].href);
@@ -270,7 +270,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { allStyleTags: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.inlineStyles).toHaveLength(2);
             expect(result.resources.inlineStyles[0].id).toBe('style-1');
@@ -279,7 +279,7 @@ describe('PdfService - getPreviewData()', () => {
         test('CSS가 없는 경우도 정상 처리', async () => {
             setupMocks();
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.cssLinks).toHaveLength(0);
             expect(result.resources.inlineStyles).toHaveLength(0);
@@ -310,7 +310,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { imageCount: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.images).toHaveLength(2);
             expect(result.resources.images[0].src).toBe(images[0].src);
@@ -340,7 +340,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { imageCount: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.images[0].srcset).toBe(true);
             expect(result.resources.images[0].media).toBeDefined();
@@ -349,7 +349,7 @@ describe('PdfService - getPreviewData()', () => {
         test('이미지가 없는 경우도 정상 처리', async () => {
             setupMocks();
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.images).toHaveLength(0);
         });
@@ -379,7 +379,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { scriptTags: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.scripts).toHaveLength(2);
             expect(result.resources.scripts[0].type).toBe('external');
@@ -408,7 +408,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { fontCount: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.fonts).toHaveLength(2);
             expect(result.resources.fonts[0].href).toContain('googleapis');
@@ -437,7 +437,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { iconCount: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.icons).toHaveLength(2);
             expect(result.resources.icons[1].rel).toBe('apple-touch-icon');
@@ -466,7 +466,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { katexCount: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.katexResources).toHaveLength(2);
             expect(result.resources.katexResources[0].type).toBe('link');
@@ -495,7 +495,7 @@ describe('PdfService - getPreviewData()', () => {
                 debug: { videoCount: 2 }
             });
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result.resources.videos).toHaveLength(2);
             expect(result.resources.videos[0].tag).toBe('video');
@@ -508,7 +508,7 @@ describe('PdfService - getPreviewData()', () => {
             mockPage.goto.mockRejectedValue(pageError);
 
             await expect(
-                PdfService.getPreviewData('https://notion.so/page')
+                PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8')
             ).rejects.toThrow();
         });
 
@@ -516,7 +516,7 @@ describe('PdfService - getPreviewData()', () => {
             browserPool.acquire.mockRejectedValue(new Error('Browser pool exhausted'));
 
             await expect(
-                PdfService.getPreviewData('https://notion.so/page')
+                PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8')
             ).rejects.toThrow('Browser pool exhausted');
         });
     });
@@ -525,7 +525,7 @@ describe('PdfService - getPreviewData()', () => {
         test('정상 완료 후 리소스가 정리됨', async () => {
             setupMocks();
 
-            await PdfService.getPreviewData('https://notion.so/page');
+            await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(mockPage.removeAllListeners).toHaveBeenCalled();
             expect(mockPage.close).toHaveBeenCalled();
@@ -534,7 +534,7 @@ describe('PdfService - getPreviewData()', () => {
         test('페이지가 null이 아닐 때 정리됨', async () => {
             setupMocks();
 
-            await PdfService.getPreviewData('https://notion.so/page');
+            await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(mockPage.removeAllListeners).toHaveBeenCalled();
             expect(mockPage.close).toHaveBeenCalled();
@@ -545,7 +545,7 @@ describe('PdfService - getPreviewData()', () => {
             mockPage.close.mockRejectedValueOnce(new Error('Close failed'));
             setupMocks();
 
-            const result = await PdfService.getPreviewData('https://notion.so/page');
+            const result = await PdfService.getPreviewData('https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8');
 
             expect(result).toBeDefined();
             expect(mockPage.close).toHaveBeenCalled();

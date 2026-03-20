@@ -142,6 +142,7 @@ class CSSTemplates {
      *   - 스크롤바 제거
      *   - SVG 및 콘텐츠 요소의 불필요한 border 제거
      *   - 높이를 자동으로 조정하여 모든 콘텐츠가 보이도록 설정
+     *   - @page 규칙으로 A4 페이지 크기 명시
      * 
      * @returns {string} 기본 레이아웃 CSS 문자열
      */

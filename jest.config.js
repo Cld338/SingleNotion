@@ -11,7 +11,9 @@ module.exports = {
     // 테스트 파일 패턴
     testMatch: [
         '<rootDir>/tests/unit/**/*.test.js',
-        '<rootDir>/tests/unit/**/*.spec.js'
+        '<rootDir>/tests/unit/**/*.spec.js',
+        '<rootDir>/tests/visual/**/*.test.js',
+        '<rootDir>/tests/visual/**/*.spec.js'
     ],
 
     // 커버리지 수집 대상
@@ -34,7 +36,8 @@ module.exports = {
     },
 
     // 타임아웃 (긴 비동기 작업 때문에 증가)
-    testTimeout: 30000,
+    // 시각적 회귀 테스트는 최대 120초 소요
+    testTimeout: 180000,
 
     // 테스트 경로 설정
     rootDir: '.',

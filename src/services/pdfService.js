@@ -19,7 +19,7 @@ class PdfService {
      * @returns {string} 모든 상대 경로가 절대 경로로 변환된 HTML 문자열
      * 
      * 예시:
-     *   입력: <img src="image.png"> with baseUrl="https://notion.so/page"
+     *   입력: <img src="image.png"> with baseUrl="https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8"
      *   출력: <img src="https://notion.so/image.png">
      */
     convertRelativeToAbsolutePaths(html, baseUrl) {
@@ -74,6 +74,780 @@ class PdfService {
     }
 
     /**
+     * 페이지 초기화 및 보안 설정을 수행합니다
+     * 
+     * 다음 작업을 수행합니다:
+     *   - Request Interception 활성화 및 보안 필터 설정
+     *   - User Agent 설정
+     *   - Viewport 크기 설정
+     * 
+     * @param {Page} page - Puppeteer 페이지 객체
+     * @param {string} url - 로드할 Notion 페이지의 URL
+     * @private
+     */
+    async _setupPageForPreview(page, url) {
+        // 보안 패치 로직
+        await page.setRequestInterception(true);
+        page.on('request', request => {
+            const reqUrl = request.url().split('?')[0];
+            const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
+
+            if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://') && !reqUrl.startsWith('data:')) {
+                return request.abort();
+            }
+
+            if (isMainFrame) {
+                const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(reqUrl);
+                if (!isNotionDomain) return request.abort();
+            }
+            const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(reqUrl);
+            if (isLocal) return request.abort();
+
+            request.continue();
+        });
+
+        page.setDefaultNavigationTimeout(120000);
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        await page.setViewport({ width: 3000, height: 1000 });
+    }
+
+    /**
+     * Notion 페이지를 분석하여 미리보기용 데이터를 수집합니다
+     * 
+     * 주어진 Notion 페이지 URL을 Puppeteer 브라우저로 열고, 페이지의 콘텐츠를
+     * 완전히 로드할 때까지 대기한 후 다음 정보를 수집합니다:
+     *   - 감지된 콘텐츠 너비
+     *   - HTML 코드
+     *   - 모든 리소스 (CSS, 이미지, 폰트, 스크립트, KaTeX 등)
+     *   - 디버그 정보
+     * 
+     * 로딩 완료 조건:
+     *   1. 모든 CSS 스타일시트 로드 완료
+     *   2. 웹 폰트 로드 완료
+     *   3. KaTeX/MathJax 수식 렌더링 완료
+     *   4. Notion 토글 블록 모두 펼침
+     *   5. CSS 애니메이션 및 렌더링 완료
+     * 
+     * 수집되는 리소스:
+     *   - CSS 링크 및 인라인 스타일
+     *   - 이미지 (img, picture 태그)
+     *   - 아이콘 (favicon, apple-touch-icon)
+     *   - 웹 폰트
+     *   - 스크립트 (외부/인라인)
+     *   - KaTeX 리소스
+     *   - 비디오/오디오 미디어
+     *   - 기타 자산 (_assets 폴더)
+     * 
+     * 모든 리소스 경로는 절대 경로로 변환됩니다.
+     * 
+     * @param {string} url - 분석할 Notion 페이지의 URL
+     * @param {Object} options - 미리보기 옵션
+     * @returns {Promise<Object>} 수집된 미리보기 데이터
+     *   - detectedWidth: {number} 감지된 페이지 콘텐츠 너비 (픽셀)
+     *   - html: {string} 추출된 HTML 코드
+     *   - resources: {Object} 수집된 모든 리소스
+     *   - debug: {Object} 디버그 정보 (리소스 개수 등)
+     * 
+     * @throws {Error} 페이지 로드 실패 또는 기타 브라우저 에러
+     */
+    /**
+     * 페이지의 모든 리소스 로드를 대기합니다
+     * 
+     * 다음이 완료될 때까지 대기합니다:
+     *   - CSS 스타일시트 로드
+     *   - 웹 폰트 로드
+     *   - KaTeX/MathJax 렌더링
+     *   - Notion 토글 블록 모두 펼침
+     *   - CSS 애니메이션 완료
+     * 
+     * 모든 작업은 클라이언트 측 page.evaluate()로 실행됩니다.
+     * 
+     * @param {Page} page - Puppeteer 페이지 객체
+     * @private
+     */
+    async _waitForResourcesLoad(page) {
+        logger.info('Waiting for CSS and JS to load completely...');
+        
+        await page.evaluate(async () => {
+            await new Promise((resolve) => {
+                let totalHeight = 0;
+                const distance = 100;
+                const timer = setInterval(() => {
+                    const scrollHeight = document.body.scrollHeight;
+                    window.scrollBy(0, distance);
+                    totalHeight += distance;
+                    if (totalHeight >= scrollHeight + 1000) {
+                        clearInterval(timer);
+                        window.scrollTo(0, 0);
+                        resolve();
+                    }
+                }, 50);
+            });
+            // 1. 모든 스타일시트 로드 완료 확인
+            const stylesheets = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+            const styleloadPromises = stylesheets.map(link => {
+                return new Promise((resolve) => {
+                    if (link.sheet) {
+                        // 이미 로드됨
+                        resolve();
+                    } else {
+                        // 로드 완료 대기
+                        link.onload = () => resolve();
+                        link.onerror = () => resolve(); // 에러나도 계속
+                        
+                        // 타임아웃 (30초)
+                        setTimeout(resolve, 30000);
+                    }
+                });
+            });
+            
+            if (styleloadPromises.length > 0) {
+                await Promise.all(styleloadPromises);
+            }
+            
+            // 2. 웹 폰트 로딩 대기
+            if (document.fonts && document.fonts.ready) {
+                await document.fonts.ready;
+            }
+            
+            // 3. 리플로우 완료 대기 (레이아웃 계산)
+            await new Promise(resolve => {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        resolve();
+                    });
+                });
+            });
+            
+            // 4. ✅ KaTeX/MathJax 렌더링 완료 대기
+            try {
+                const hasKaTeX = document.querySelectorAll('.katex').length > 0;
+                if (hasKaTeX) {
+                    console.log(`[Preview] Found ${document.querySelectorAll('.katex').length} KaTeX elements`);
+                    await new Promise((resolve) => {
+                        let isStable = false;
+                        let checkCount = 0;
+                        const maxChecks = 10;
+                        
+                        const checkKaTeXReady = () => {
+                            checkCount++;
+                            const currentKaTeXCount = document.querySelectorAll('.katex').length;
+                            console.log(`[Preview-KaTeX] Check ${checkCount}: ${currentKaTeXCount} elements`);
+                            
+                            if (isStable || checkCount >= maxChecks) {
+                                console.log(`[Preview-KaTeX] Rendering complete`);
+                                resolve();
+                            } else {
+                                if (checkCount > 1 && currentKaTeXCount === 
+                                    (window._previewKaTeXCount || 0)) {
+                                    isStable = true;
+                                    console.log(`[Preview-KaTeX] Stable at check ${checkCount}`);
+                                    resolve();
+                                }
+                                window._previewKaTeXCount = currentKaTeXCount;
+                                setTimeout(checkKaTeXReady, 500);
+                            }
+                        };
+                        
+                        checkKaTeXReady();
+                    });
+                }
+                
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    console.log(`[Preview-MathJax] Found, waiting for typeset...`);
+                    try {
+                        await Promise.race([
+                            window.MathJax.typesetPromise(),
+                            new Promise(resolve => setTimeout(resolve, 3000))
+                        ]);
+                        console.log(`[Preview-MathJax] Typeset complete`);
+                    } catch (err) {
+                        console.warn(`Preview MathJax typeset error: ${err.message}`);
+                    }
+                }
+            } catch (err) {
+                console.warn(`Preview KaTeX/MathJax check failed: ${err.message}`);
+            }
+            
+            // 5. ✅ 노션 토글 블록 모두 열기 및 렌더링 대기
+            console.log('[Preview-Toggle] Starting to open all toggles...');
+            try {
+                let allToggleClosed = false;
+                let iterationCount = 0;
+                const maxIterations = 20; // 무한 루프 방지
+                
+                // 중첩된 토글까지 모두 처리하기 위해 반복 실행
+                while (!allToggleClosed && iterationCount < maxIterations) {
+                    iterationCount++;
+                    console.log(`[Preview-Toggle] Iteration ${iterationCount}: Checking for closed toggles...`);
+                    
+                    const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
+                    const closedToggles = Array.from(toggleButtons).filter(btn => 
+                        btn.getAttribute('aria-expanded') === 'false'
+                    );
+                    
+                    console.log(`[Preview-Toggle] Iteration ${iterationCount}: Found ${closedToggles.length} closed toggles`);
+                    
+                    if (closedToggles.length === 0) {
+                        allToggleClosed = true;
+                        console.log('[Preview-Toggle] All toggles are now open');
+                    } else {
+                        // 모든 닫힌 토글 클릭
+                        closedToggles.forEach(button => {
+                            button.click();
+                        });
+                        
+                        // 렌더링 대기 (새로운 토글이 DOM에 추가될 시간 제공)
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                        // requestAnimationFrame로 레이아웃 계산 완료 대기
+                        await new Promise(resolve => {
+                            requestAnimationFrame(() => {
+                                requestAnimationFrame(() => {
+                                    resolve();
+                                });
+                            });
+                        });
+                    }
+                }
+                
+                if (iterationCount >= maxIterations) {
+                    console.warn('[Preview-Toggle] Max iterations reached, some toggles may still be closed');
+                }
+                
+                // 최종 안정화 대기
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('[Preview-Toggle] Toggle processing completed');
+            } catch (err) {
+                console.warn(`[Preview-Toggle] Error opening toggles: ${err.message}`);
+            }
+            
+            // 6. 추가 지연 (CSS 애니메이션 + 렌더링 완료)
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        });
+
+        logger.info('CSS and JS loading completed');
+    }
+
+    /**
+     * 수집된 리소스의 상대 경로를 절대 경로로 변환합니다
+     * 
+     * HTML 및 모든 리소스 항목들의 URL을 기준 URL에 따라 절대 경로로 변환합니다.
+     * 변환 실패 시에도 원본을 반환하도록 에러 처리합니다.
+     * 
+     * @param {Object} result - 수집된 미리보기 데이터
+     * @param {string} url - 기준이 되는 Notion 페이지 URL
+     * @private
+     */
+    _convertCollectedResourcePaths(result, url) {
+        // 상대 경로를 절대 경로로 변환
+        result.html = this.convertRelativeToAbsolutePaths(result.html, url);
+        
+        // 모든 리소스 링크를 절대 경로로 변환
+        result.resources.cssLinks = result.resources.cssLinks.map(css => {
+            try {
+                const converted = this.convertRelativeToAbsolutePaths(`<link href="${css.href}">`, url);
+                const match = converted.match(/href="([^"]+)"/);
+                const resolvedHref = match ? match[1] : css.href;
+                return { ...css, href: resolvedHref };
+            } catch (err) {
+                logger.warn(`Failed to convert CSS href: ${css.href} - ${err.message}`);
+                return css;
+            }
+        });
+        
+        // 이미지 경로 변환
+        result.resources.images = result.resources.images.map(img => {
+            try {
+                const converted = this.convertRelativeToAbsolutePaths(`<img src="${img.src}">`, url);
+                const match = converted.match(/src="([^"]+)"/);
+                const resolvedSrc = match ? match[1] : img.src;
+                return { ...img, src: resolvedSrc };
+            } catch (err) {
+                logger.warn(`Failed to convert image src: ${img.src} - ${err.message}`);
+                return img;
+            }
+        });
+        
+        // 아이콘 경로 변환
+        result.resources.icons = result.resources.icons.map(icon => {
+            try {
+                const converted = this.convertRelativeToAbsolutePaths(`<link href="${icon.href}">`, url);
+                const match = converted.match(/href="([^"]+)"/);
+                const resolvedHref = match ? match[1] : icon.href;
+                return { ...icon, href: resolvedHref };
+            } catch (err) {
+                logger.warn(`Failed to convert icon href: ${icon.href} - ${err.message}`);
+                return icon;
+            }
+        });
+        
+        // 폰트 경로 변환
+        result.resources.fonts = result.resources.fonts.map(font => {
+            try {
+                const converted = this.convertRelativeToAbsolutePaths(`<link href="${font.href}">`, url);
+                const match = converted.match(/href="([^"]+)"/);
+                const resolvedHref = match ? match[1] : font.href;
+                return { ...font, href: resolvedHref };
+            } catch (err) {
+                logger.warn(`Failed to convert font href: ${font.href} - ${err.message}`);
+                return font;
+            }
+        });
+        
+        // 스크립트 경로 변환 (외부 스크립트만)
+        result.resources.scripts = result.resources.scripts.map(script => {
+            if (script.type === 'external') {
+                try {
+                    const converted = this.convertRelativeToAbsolutePaths(`<script src="${script.src}"></script>`, url);
+                    const match = converted.match(/src="([^"]+)"/);
+                    const resolvedSrc = match ? match[1] : script.src;
+                    return { ...script, src: resolvedSrc };
+                } catch (err) {
+                    logger.warn(`Failed to convert script src: ${script.src} - ${err.message}`);
+                    return script;
+                }
+            }
+            return script;
+        });
+        
+        // KaTeX 리소스 경로 변환
+        result.resources.katexResources = result.resources.katexResources.map(katex => {
+            try {
+                if (katex.type === 'link') {
+                    const converted = this.convertRelativeToAbsolutePaths(`<link href="${katex.href}">`, url);
+                    const match = converted.match(/href="([^"]+)"/);
+                    const resolvedHref = match ? match[1] : katex.href;
+                    return { ...katex, href: resolvedHref };
+                } else {
+                    const converted = this.convertRelativeToAbsolutePaths(`<script src="${katex.src}"></script>`, url);
+                    const match = converted.match(/src="([^"]+)"/);
+                    const resolvedSrc = match ? match[1] : katex.src;
+                    return { ...katex, src: resolvedSrc };
+                }
+            } catch (err) {
+                logger.warn(`Failed to convert KaTeX resource - ${err.message}`);
+                return katex;
+            }
+        });
+        
+        // 비디오/미디어 경로 변환
+        result.resources.videos = result.resources.videos.map(video => {
+            try {
+                const converted = this.convertRelativeToAbsolutePaths(`<source src="${video.src}">`, url);
+                const match = converted.match(/src="([^"]+)"/);
+                const resolvedSrc = match ? match[1] : video.src;
+                return { ...video, src: resolvedSrc };
+            } catch (err) {
+                logger.warn(`Failed to convert video src: ${video.src} - ${err.message}`);
+                return video;
+            }
+        });
+        
+        // 기타 assets 경로 변환
+        result.resources.otherAssets = result.resources.otherAssets.map(asset => {
+            try {
+                const converted = this.convertRelativeToAbsolutePaths(`<a href="${asset.url}">`, url);
+                const match = converted.match(/href="([^"]+)"/);
+                const resolvedUrl = match ? match[1] : asset.url;
+                return { ...asset, url: resolvedUrl };
+            } catch (err) {
+                logger.warn(`Failed to convert asset url: ${asset.url} - ${err.message}`);
+                return asset;
+            }
+        });
+    }
+
+    /**
+     * 수집된 미리보기 데이터에 대해 상세 로깅을 수행합니다
+     * 
+     * 리소스 요약 정보와 상세 항목을 로깅합니다.
+     * 
+     * @param {Object} result - 수집된 미리보기 데이터
+     * @private
+     */
+    _logPreviewDataDetails(result) {
+        logger.info(`getPreviewData - Debug: ${JSON.stringify(result.debug)}`);
+        logger.info(`getPreviewData - Width: ${result.detectedWidth}`);
+        
+        // ⚠️ Debug: 서버 수신 HTML에서 mask 속성 확인
+        const maskMatches = result.html.match(/mask:\s*url\([^)]*\)/gi) || [];
+        logger.info(`[DEBUG] mask: url() patterns received from client: ${maskMatches.length}`);
+        maskMatches.slice(0, 3).forEach((match, idx) => {
+            logger.debug(`[DEBUG] Mask ${idx + 1}: ${match.substring(0, 100)}`);
+        });
+        
+        logger.info(`getPreviewData - Resources Summary:`);
+        logger.info(`  - CSS Links: ${result.resources.cssLinks.length}`);
+        logger.info(`  - Scripts: ${result.resources.scripts.length}`);
+        logger.info(`  - Inline Styles: ${result.resources.inlineStyles.length}`);
+        logger.info(`  - Images: ${result.resources.images.length}`);
+        logger.info(`  - Icons: ${result.resources.icons.length}`);
+        logger.info(`  - Fonts: ${result.resources.fonts.length}`);
+        logger.info(`  - KaTeX Resources: ${result.resources.katexResources.length}`);
+        logger.info(`  - Videos/Media: ${result.resources.videos.length}`);
+        logger.info(`  - Other Assets: ${result.resources.otherAssets.length}`);
+        
+        // 상세 로그 (DEBUG 레벨)
+        result.resources.cssLinks.forEach((css, idx) => {
+            logger.debug(`CSS[${idx + 1}]: ${css.href}`);
+        });
+        
+        result.resources.images.forEach((img, idx) => {
+            logger.debug(`Image[${idx + 1}]: ${img.src}`);
+        });
+        
+        result.resources.icons.forEach((icon, idx) => {
+            logger.debug(`Icon[${idx + 1}]: ${icon.href}`);
+        });
+        
+        result.resources.scripts.filter(s => s.type === 'external').forEach((script, idx) => {
+            logger.debug(`Script[${idx + 1}]: ${script.src}`);
+        });
+        
+        result.resources.katexResources.forEach((katex, idx) => {
+            logger.debug(`KaTeX[${idx + 1}]: ${katex.src || katex.href}`);
+        });
+    }
+
+    /**
+     * Notion 페이지를 분석하여 미리보기용 데이터를 수집합니다
+     * 
+     * 주어진 Notion 페이지 URL을 Puppeteer 브라우저로 열고, 페이지의 콘텐츠를
+     * 완전히 로드할 때까지 대기한 후 다음 정보를 수집합니다:
+     *   - 감지된 콘텐츠 너비
+     *   - HTML 코드
+     *   - 모든 리소스 (CSS, 이미지, 폰트, 스크립트, KaTeX 등)
+     *   - 디버그 정보
+     * 
+     * @param {string} url - 분석할 Notion 페이지의 URL
+     * @param {Object} options - 미리보기 옵션
+     * @returns {Promise<Object>} 수집된 미리보기 데이터
+     * @private
+     */
+    async _collectPreviewDataFromPage(page, options) {
+        const result = await page.evaluate((opts) => {
+            // ✅ CSS url() 변환 함수 (평가 환경에서 실행)
+            function convertCssUrlsToProxyAsset(cssText) {
+                if (!cssText) return cssText;
+                
+                return cssText.replace(
+                    /url\(\s*['"]?(?!(?:\/proxy-asset|data:))([^)'"]+)['"]?\s*\)/gi,
+                    (match, urlPath) => {
+                        urlPath = urlPath.trim();
+                        
+                        // 이미 proxy-asset이거나 data URI는 그대로
+                        if (urlPath.includes('/proxy-asset') || urlPath.startsWith('data:')) {
+                            return match;
+                        }
+                        
+                        // 절대 경로(http/https 포함)는 proxy-asset으로 변환
+                        if (urlPath.startsWith('http://') || urlPath.startsWith('https://') || urlPath.startsWith('//')) {
+                            const absolutePath = urlPath.startsWith('//') ? 'https:' + urlPath : urlPath;
+                            const proxiedUrl = `/proxy-asset?url=${encodeURIComponent(absolutePath)}`;
+                            console.log('[Preview-CSS] Converting CSS url path:', urlPath.substring(0, 60) + '...');
+                            return `url('${proxiedUrl}')`;
+                        }
+                        
+                        return match;
+                    }
+                );
+            }
+
+            // const { includeTitle, includeBanner, includeTags } = opts;
+
+            const includeTitle = true;
+            const includeBanner = true;
+            const includeTags = true;
+        
+            
+            const contentEl = document.querySelector('.notion-page-content');
+            const width = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) : 1080;
+            
+            // --- [수정된 부분] 옵션에 따라 HTML 블록들을 추출하여 병합 ---
+            let htmlParts = [];
+            let addedElements = new Set();
+            
+            // 중복 추출을 방지하기 위한 헬퍼 함수
+            const pushElement = (el) => {
+                if (el && !addedElements.has(el)) {
+                    htmlParts.push(el.outerHTML);
+                    addedElements.add(el);
+                }
+            };
+
+            // --- [추가된 부분] (0) 전역 SVG 심볼(Sprite) 추출 ---
+            // 노션 문서 내에 숨겨진 아이콘/도형 정의들을 찾아 함께 포함시킵니다.
+            document.querySelectorAll('svg symbol, svg defs').forEach(el => {
+                const parentSvg = el.closest('svg');
+                if (parentSvg && !addedElements.has(parentSvg)) {
+                    const clone = parentSvg.cloneNode(true);
+                    // 미리보기 레이아웃을 해치지 않도록 완전히 숨김 처리
+                    clone.style.display = 'none';
+                    clone.style.position = 'absolute';
+                    clone.style.width = '0';
+                    clone.style.height = '0';
+                    htmlParts.push(clone.outerHTML);
+                    addedElements.add(parentSvg);
+                }
+            });
+            // ---------------------------------------------------
+
+            // (1) 배너 및 아이콘
+            if (includeBanner) {
+                const cover = document.querySelector('.layout-full');
+                pushElement(cover);
+                
+                const iconBlock = document.querySelector('.layout-content:nth-child(1) > div > div > .pseudoSelection > div > div > div > div > div > img');
+                if (iconBlock) {
+                    pushElement(iconBlock);
+                }
+            }
+            
+            // (2) 제목
+            if (includeTitle) {
+                const h1 = document.querySelector('h1');
+                if (h1) {
+                    const titleBlock = h1.closest('.notion-page-block') || h1;
+                    pushElement(titleBlock);
+                }
+            }
+            
+            // (3) 페이지 속성 (태그)
+            if (includeTags) {
+                const tags = document.querySelector('div[aria-label="페이지 속성"], div[aria-label="Page properties"]');
+                if (tags) pushElement(tags);
+            }
+            
+            // (4) 메인 콘텐츠 블록들 (기존의 내용)
+            if (contentEl) {
+                htmlParts.push(contentEl.innerHTML);
+            }
+            
+            // 모든 파트를 순서대로 하나의 HTML 문자열로 병합
+            const html = htmlParts.join('\n');
+            // -------------------------------------------------------------
+            
+            // 필요한 모든 리소스 수집
+            const resources = {
+                cssLinks: [],
+                scripts: [],
+                inlineStyles: [],
+                images: [],
+                icons: [],
+                fonts: [],
+                katexResources: [],
+                videos: [],
+                otherAssets: []
+            };
+            const debugInfo = {};
+
+            // 1. CSS 링크 수집
+            debugInfo.allLinkTags = document.querySelectorAll('link').length;
+            debugInfo.stylesheetLinks = document.querySelectorAll('link[rel="stylesheet"]').length;
+            
+            document.querySelectorAll('link[rel="stylesheet"]').forEach((link, idx) => {
+                const href = link.getAttribute('href');
+                const media = link.getAttribute('media') || 'all';
+                
+                if (href) {
+                    resources.cssLinks.push({
+                        href: href,
+                        media: media,
+                        crossorigin: link.getAttribute('crossorigin')
+                    });
+                }
+            });
+
+            // 2. 아이콘 수집 (favicon, apple-touch-icon 등)
+            document.querySelectorAll('link[rel*="icon"]').forEach((link) => {
+                const href = link.getAttribute('href');
+                if (href) {
+                    resources.icons.push({
+                        href: href,
+                        rel: link.getAttribute('rel'),
+                        type: link.getAttribute('type'),
+                        sizes: link.getAttribute('sizes')
+                    });
+                }
+            });
+
+            // 3. 웹 폰트 수집 (link 요소와 @font-face)
+            document.querySelectorAll('link[href*="font"]').forEach((link) => {
+                const href = link.getAttribute('href');
+                if (href && !resources.cssLinks.some(css => css.href === href)) {
+                    resources.fonts.push({ href: href });
+                }
+            });
+
+            // 4. 스크립트 수집
+            debugInfo.scriptTags = document.querySelectorAll('script').length;
+            
+            document.querySelectorAll('script').forEach((script, idx) => {
+                if (script.src) {
+                    // 외부 스크립트
+                    resources.scripts.push({
+                        type: 'external',
+                        src: script.getAttribute('src'),
+                        async: script.hasAttribute('async'),
+                        defer: script.hasAttribute('defer')
+                    });
+                } else if (script.textContent.trim().length > 0 && script.textContent.length < 500000) {
+                    // 인라인 스크립트 (500KB 이하만)
+                    resources.scripts.push({
+                        type: 'inline',
+                        content: script.textContent,
+                        contentLength: script.textContent.length
+                    });
+                }
+            });
+
+            // 5. 인라인 스타일 수집
+            debugInfo.allStyleTags = document.querySelectorAll('style').length;
+            
+            document.querySelectorAll('style').forEach((style, idx) => {
+                const id = style.id || `_style_${idx}`;
+                const contentLength = style.textContent.length;
+                
+                // 매우 큰 스타일만 제외 (1MB 이상)
+                if (contentLength < 1000000) {
+                    // ✅ CSS 내 url() 경로를 proxy-asset으로 변환
+                    const convertedCssText = convertCssUrlsToProxyAsset(style.textContent);
+                    resources.inlineStyles.push({
+                        id: id,
+                        content: convertedCssText
+                    });
+                }
+            });
+
+            // ✅ 또한 요소의 style 속성 내 url() 경로도 처리 (인라인 스타일)
+            console.log('[Preview] Converting inline style attributes with url()...');
+            document.querySelectorAll('[style*="url"]').forEach((el) => {
+                const styleAttr = el.getAttribute('style');
+                if (styleAttr && styleAttr.includes('url(')) {
+                    const convertedStyle = convertCssUrlsToProxyAsset(styleAttr);
+                    el.setAttribute('style', convertedStyle);
+                }
+            });
+
+            // 6. 이미지 수집
+            const imageUrls = new Set();
+            
+            document.querySelectorAll('img').forEach((img) => {
+                const src = img.getAttribute('src');
+                if (src && !imageUrls.has(src)) {
+                    imageUrls.add(src);
+                    resources.images.push({
+                        src: src,
+                        alt: img.getAttribute('alt') || '',
+                        title: img.getAttribute('title') || '',
+                        dataAttributes: Array.from(img.attributes)
+                            .filter(attr => attr.name.startsWith('data-'))
+                            .map(attr => ({ name: attr.name, value: attr.value }))
+                    });
+                }
+            });
+
+            // picture 요소의 이미지
+            document.querySelectorAll('picture source').forEach((source) => {
+                const srcset = source.getAttribute('srcset');
+                if (srcset) {
+                    srcset.split(',').forEach(pair => {
+                        const url = pair.trim().split(' ')[0];
+                        if (url && !imageUrls.has(url)) {
+                            imageUrls.add(url);
+                            resources.images.push({
+                                src: url,
+                                srcset: true,
+                                media: source.getAttribute('media')
+                            });
+                        }
+                    });
+                }
+            });
+
+            // 7. KaTeX 리소스 수집
+            const katexLinks = document.querySelectorAll('link[href*="katex"]');
+            const katexScripts = document.querySelectorAll('script[src*="katex"]');
+            
+            katexLinks.forEach((link) => {
+                resources.katexResources.push({
+                    type: 'link',
+                    href: link.getAttribute('href')
+                });
+            });
+
+            katexScripts.forEach((script) => {
+                resources.katexResources.push({
+                    type: 'script',
+                    src: script.getAttribute('src')
+                });
+            });
+
+            // 8. 비디오 및 미디어 수집
+            document.querySelectorAll('video, audio').forEach((media) => {
+                const src = media.getAttribute('src');
+                if (src) {
+                    resources.videos.push({
+                        tag: media.tagName.toLowerCase(),
+                        src: src,
+                        type: media.getAttribute('type')
+                    });
+                }
+                
+                // source 태그의 src도 수집
+                media.querySelectorAll('source').forEach((source) => {
+                    const srcVal = source.getAttribute('src');
+                    if (srcVal) {
+                        resources.videos.push({
+                            tag: 'source',
+                            src: srcVal,
+                            type: source.getAttribute('type')
+                        });
+                    }
+                });
+            });
+
+            // 9. _assets 폴더 참조 찾기 (CSS, script, img src에서)
+            const assetPattern = /_assets|/gm;
+            const allResourceText = JSON.stringify(resources);
+            
+            if (assetPattern.test(allResourceText)) {
+                debugInfo.hasAssets = true;
+            }
+
+            // 10. 기타 확장자 리소스 수집 (SVG, WebP 등)
+            document.querySelectorAll('[href*="_assets"], [src*="_assets"]').forEach((el) => {
+                const href = el.getAttribute('href') || el.getAttribute('src');
+                if (href && !resources.otherAssets.some(a => a.url === href)) {
+                    resources.otherAssets.push({
+                        url: href,
+                        type: el.tagName.toLowerCase()
+                    });
+                }
+            });
+
+            debugInfo.imageCount = resources.images.length;
+            debugInfo.scriptCount = resources.scripts.length;
+            debugInfo.iconCount = resources.icons.length;
+            debugInfo.fontCount = resources.fonts.length;
+            debugInfo.katexCount = resources.katexResources.length;
+            debugInfo.videoCount = resources.videos.length;
+            debugInfo.assetCount = resources.otherAssets.length;
+
+            // 메타 정보 함께 반환
+            return {
+                detectedWidth: width,
+                html: html,
+                resources: resources,
+                debug: debugInfo
+            };
+        }, options);
+
+        return result;
+    }
+
+    /**
      * Notion 페이지를 분석하여 미리보기용 데이터를 수집합니다
      * 
      * 주어진 Notion 페이지 URL을 Puppeteer 브라우저로 열고, 페이지의 콘텐츠를
@@ -119,671 +893,23 @@ class PdfService {
         try {
             page = await browser.newPage();
 
-            // 보안 패치 로직
-            await page.setRequestInterception(true);
-            page.on('request', request => {
-                const reqUrl = request.url().split('?')[0];
-                const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
+            // 페이지 초기화 및 보안 설정
+            await this._setupPageForPreview(page, url);
 
-                if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://') && !reqUrl.startsWith('data:')) {
-                    return request.abort();
-                }
-
-                if (isMainFrame) {
-                    const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(reqUrl);
-                    if (!isNotionDomain) return request.abort();
-                }
-                const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(reqUrl);
-                if (isLocal) return request.abort();
-
-                request.continue();
-            });
-
-            page.setDefaultNavigationTimeout(120000);
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-            await page.setViewport({ width: 3000, height: 1000 });
+            // 페이지 로드 및 콘텐츠 대기
             await page.goto(url, { waitUntil: 'networkidle2' });
 
             // CSS와 JS 로딩이 완료될 때까지 대기
-            logger.info('Waiting for CSS and JS to load completely...');
-            
-            await page.evaluate(async () => {
-                await new Promise((resolve) => {
-                    let totalHeight = 0;
-                    const distance = 100;
-                    const timer = setInterval(() => {
-                        const scrollHeight = document.body.scrollHeight;
-                        window.scrollBy(0, distance);
-                        totalHeight += distance;
-                        if (totalHeight >= scrollHeight + 1000) {
-                            clearInterval(timer);
-                            window.scrollTo(0, 0);
-                            resolve();
-                        }
-                    }, 50);
-                });
-                // 1. 모든 스타일시트 로드 완료 확인
-                const stylesheets = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
-                const styleloadPromises = stylesheets.map(link => {
-                    return new Promise((resolve) => {
-                        if (link.sheet) {
-                            // 이미 로드됨
-                            resolve();
-                        } else {
-                            // 로드 완료 대기
-                            link.onload = () => resolve();
-                            link.onerror = () => resolve(); // 에러나도 계속
-                            
-                            // 타임아웃 (30초)
-                            setTimeout(resolve, 30000);
-                        }
-                    });
-                });
-                
-                if (styleloadPromises.length > 0) {
-                    await Promise.all(styleloadPromises);
-                }
-                
-                // 2. 웹 폰트 로딩 대기
-                if (document.fonts && document.fonts.ready) {
-                    await document.fonts.ready;
-                }
-                
-                // 3. 리플로우 완료 대기 (레이아웃 계산)
-                await new Promise(resolve => {
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            resolve();
-                        });
-                    });
-                });
-                
-                // 4. ✅ KaTeX/MathJax 렌더링 완료 대기
-                try {
-                    const hasKaTeX = document.querySelectorAll('.katex').length > 0;
-                    if (hasKaTeX) {
-                        console.log(`[Preview] Found ${document.querySelectorAll('.katex').length} KaTeX elements`);
-                        await new Promise((resolve) => {
-                            let isStable = false;
-                            let checkCount = 0;
-                            const maxChecks = 10;
-                            
-                            const checkKaTeXReady = () => {
-                                checkCount++;
-                                const currentKaTeXCount = document.querySelectorAll('.katex').length;
-                                console.log(`[Preview-KaTeX] Check ${checkCount}: ${currentKaTeXCount} elements`);
-                                
-                                if (isStable || checkCount >= maxChecks) {
-                                    console.log(`[Preview-KaTeX] Rendering complete`);
-                                    resolve();
-                                } else {
-                                    if (checkCount > 1 && currentKaTeXCount === 
-                                        (window._previewKaTeXCount || 0)) {
-                                        isStable = true;
-                                        console.log(`[Preview-KaTeX] Stable at check ${checkCount}`);
-                                        resolve();
-                                    }
-                                    window._previewKaTeXCount = currentKaTeXCount;
-                                    setTimeout(checkKaTeXReady, 500);
-                                }
-                            };
-                            
-                            checkKaTeXReady();
-                        });
-                    }
-                    
-                    if (window.MathJax && window.MathJax.typesetPromise) {
-                        console.log(`[Preview-MathJax] Found, waiting for typeset...`);
-                        try {
-                            await Promise.race([
-                                window.MathJax.typesetPromise(),
-                                new Promise(resolve => setTimeout(resolve, 3000))
-                            ]);
-                            console.log(`[Preview-MathJax] Typeset complete`);
-                        } catch (err) {
-                            console.warn(`Preview MathJax typeset error: ${err.message}`);
-                        }
-                    }
-                } catch (err) {
-                    console.warn(`Preview KaTeX/MathJax check failed: ${err.message}`);
-                }
-                
-                // 5. ✅ 노션 토글 블록 모두 열기 및 렌더링 대기
-                console.log('[Preview-Toggle] Starting to open all toggles...');
-                try {
-                    let allToggleClosed = false;
-                    let iterationCount = 0;
-                    const maxIterations = 20; // 무한 루프 방지
-                    
-                    // 중첩된 토글까지 모두 처리하기 위해 반복 실행
-                    while (!allToggleClosed && iterationCount < maxIterations) {
-                        iterationCount++;
-                        console.log(`[Preview-Toggle] Iteration ${iterationCount}: Checking for closed toggles...`);
-                        
-                        const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
-                        const closedToggles = Array.from(toggleButtons).filter(btn => 
-                            btn.getAttribute('aria-expanded') === 'false'
-                        );
-                        
-                        console.log(`[Preview-Toggle] Iteration ${iterationCount}: Found ${closedToggles.length} closed toggles`);
-                        
-                        if (closedToggles.length === 0) {
-                            allToggleClosed = true;
-                            console.log('[Preview-Toggle] All toggles are now open');
-                        } else {
-                            // 모든 닫힌 토글 클릭
-                            closedToggles.forEach(button => {
-                                button.click();
-                            });
-                            
-                            // 렌더링 대기 (새로운 토글이 DOM에 추가될 시간 제공)
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                            
-                            // requestAnimationFrame로 레이아웃 계산 완료 대기
-                            await new Promise(resolve => {
-                                requestAnimationFrame(() => {
-                                    requestAnimationFrame(() => {
-                                        resolve();
-                                    });
-                                });
-                            });
-                        }
-                    }
-                    
-                    if (iterationCount >= maxIterations) {
-                        console.warn('[Preview-Toggle] Max iterations reached, some toggles may still be closed');
-                    }
-                    
-                    // 최종 안정화 대기
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    console.log('[Preview-Toggle] Toggle processing completed');
-                } catch (err) {
-                    console.warn(`[Preview-Toggle] Error opening toggles: ${err.message}`);
-                }
-                
-                // 6. 추가 지연 (CSS 애니메이션 + 렌더링 완료)
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            });
-
-            logger.info('CSS and JS loading completed');
+            await this._waitForResourcesLoad(page);
 
             // 콘텐츠 너비, HTML 및 필요한 리소스 추출
-            const result = await page.evaluate((opts) => {
-                // ✅ CSS url() 변환 함수 (평가 환경에서 실행)
-                function convertCssUrlsToProxyAsset(cssText) {
-                    if (!cssText) return cssText;
-                    
-                    return cssText.replace(
-                        /url\(\s*['"]?(?!(?:\/proxy-asset|data:))([^)'"]+)['"]?\s*\)/gi,
-                        (match, urlPath) => {
-                            urlPath = urlPath.trim();
-                            
-                            // 이미 proxy-asset이거나 data URI는 그대로
-                            if (urlPath.includes('/proxy-asset') || urlPath.startsWith('data:')) {
-                                return match;
-                            }
-                            
-                            // 절대 경로(http/https 포함)는 proxy-asset으로 변환
-                            if (urlPath.startsWith('http://') || urlPath.startsWith('https://') || urlPath.startsWith('//')) {
-                                const absolutePath = urlPath.startsWith('//') ? 'https:' + urlPath : urlPath;
-                                const proxiedUrl = `/proxy-asset?url=${encodeURIComponent(absolutePath)}`;
-                                console.log('[Preview-CSS] Converting CSS url path:', urlPath.substring(0, 60) + '...');
-                                return `url('${proxiedUrl}')`;
-                            }
-                            
-                            return match;
-                        }
-                    );
-                }
+            const result = await this._collectPreviewDataFromPage(page, options);
 
-                // const { includeTitle, includeBanner, includeTags } = opts;
+            // 리소스 경로 변환
+            this._convertCollectedResourcePaths(result, url);
 
-                const includeTitle = true;
-                const includeBanner = true;
-                const includeTags = true;
-            
-                
-                const contentEl = document.querySelector('.notion-page-content');
-                const width = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) : 1080;
-                
-                // --- [수정된 부분] 옵션에 따라 HTML 블록들을 추출하여 병합 ---
-                let htmlParts = [];
-                let addedElements = new Set();
-                
-                // 중복 추출을 방지하기 위한 헬퍼 함수
-                const pushElement = (el) => {
-                    if (el && !addedElements.has(el)) {
-                        htmlParts.push(el.outerHTML);
-                        addedElements.add(el);
-                    }
-                };
-
-                // --- [추가된 부분] (0) 전역 SVG 심볼(Sprite) 추출 ---
-                // 노션 문서 내에 숨겨진 아이콘/도형 정의들을 찾아 함께 포함시킵니다.
-                document.querySelectorAll('svg symbol, svg defs').forEach(el => {
-                    const parentSvg = el.closest('svg');
-                    if (parentSvg && !addedElements.has(parentSvg)) {
-                        const clone = parentSvg.cloneNode(true);
-                        // 미리보기 레이아웃을 해치지 않도록 완전히 숨김 처리
-                        clone.style.display = 'none';
-                        clone.style.position = 'absolute';
-                        clone.style.width = '0';
-                        clone.style.height = '0';
-                        htmlParts.push(clone.outerHTML);
-                        addedElements.add(parentSvg);
-                    }
-                });
-                // ---------------------------------------------------
-
-                // (1) 배너 및 아이콘
-                if (includeBanner) {
-                    const cover = document.querySelector('.layout-full');
-                    pushElement(cover);
-                    
-                    const iconBlock = document.querySelector('.layout-content:nth-child(1) > div > div > .pseudoSelection > div > div > div > div > div > img');
-                    if (iconBlock) {
-                        pushElement(iconBlock);
-                    }
-                }
-                
-                // (2) 제목
-                if (includeTitle) {
-                    const h1 = document.querySelector('h1');
-                    if (h1) {
-                        const titleBlock = h1.closest('.notion-page-block') || h1;
-                        pushElement(titleBlock);
-                    }
-                }
-                
-                // (3) 페이지 속성 (태그)
-                if (includeTags) {
-                    const tags = document.querySelector('div[aria-label="페이지 속성"], div[aria-label="Page properties"]');
-                    if (tags) pushElement(tags);
-                }
-                
-                // (4) 메인 콘텐츠 블록들 (기존의 내용)
-                if (contentEl) {
-                    htmlParts.push(contentEl.innerHTML);
-                }
-                
-                // 모든 파트를 순서대로 하나의 HTML 문자열로 병합
-                const html = htmlParts.join('\n');
-                // -------------------------------------------------------------
-                
-                // 필요한 모든 리소스 수집
-                const resources = {
-                    cssLinks: [],
-                    scripts: [],
-                    inlineStyles: [],
-                    images: [],
-                    icons: [],
-                    fonts: [],
-                    katexResources: [],
-                    videos: [],
-                    otherAssets: []
-                };
-                const debugInfo = {};
-
-                // 1. CSS 링크 수집
-                debugInfo.allLinkTags = document.querySelectorAll('link').length;
-                debugInfo.stylesheetLinks = document.querySelectorAll('link[rel="stylesheet"]').length;
-                
-                document.querySelectorAll('link[rel="stylesheet"]').forEach((link, idx) => {
-                    const href = link.getAttribute('href');
-                    const media = link.getAttribute('media') || 'all';
-                    
-                    if (href) {
-                        resources.cssLinks.push({
-                            href: href,
-                            media: media,
-                            crossorigin: link.getAttribute('crossorigin')
-                        });
-                    }
-                });
-
-                // 2. 아이콘 수집 (favicon, apple-touch-icon 등)
-                document.querySelectorAll('link[rel*="icon"]').forEach((link) => {
-                    const href = link.getAttribute('href');
-                    if (href) {
-                        resources.icons.push({
-                            href: href,
-                            rel: link.getAttribute('rel'),
-                            type: link.getAttribute('type'),
-                            sizes: link.getAttribute('sizes')
-                        });
-                    }
-                });
-
-                // 3. 웹 폰트 수집 (link 요소와 @font-face)
-                document.querySelectorAll('link[href*="font"]').forEach((link) => {
-                    const href = link.getAttribute('href');
-                    if (href && !resources.cssLinks.some(css => css.href === href)) {
-                        resources.fonts.push({ href: href });
-                    }
-                });
-
-                // 4. 스크립트 수집
-                debugInfo.scriptTags = document.querySelectorAll('script').length;
-                
-                document.querySelectorAll('script').forEach((script, idx) => {
-                    if (script.src) {
-                        // 외부 스크립트
-                        resources.scripts.push({
-                            type: 'external',
-                            src: script.getAttribute('src'),
-                            async: script.hasAttribute('async'),
-                            defer: script.hasAttribute('defer')
-                        });
-                    } else if (script.textContent.trim().length > 0 && script.textContent.length < 500000) {
-                        // 인라인 스크립트 (500KB 이하만)
-                        resources.scripts.push({
-                            type: 'inline',
-                            content: script.textContent,
-                            contentLength: script.textContent.length
-                        });
-                    }
-                });
-
-                // 5. 인라인 스타일 수집
-                debugInfo.allStyleTags = document.querySelectorAll('style').length;
-                
-                document.querySelectorAll('style').forEach((style, idx) => {
-                    const id = style.id || `_style_${idx}`;
-                    const contentLength = style.textContent.length;
-                    
-                    // 매우 큰 스타일만 제외 (1MB 이상)
-                    if (contentLength < 1000000) {
-                        // ✅ CSS 내 url() 경로를 proxy-asset으로 변환
-                        const convertedCssText = convertCssUrlsToProxyAsset(style.textContent);
-                        resources.inlineStyles.push({
-                            id: id,
-                            content: convertedCssText
-                        });
-                    }
-                });
-
-                // ✅ 또한 요소의 style 속성 내 url() 경로도 처리 (인라인 스타일)
-                console.log('[Preview] Converting inline style attributes with url()...');
-                document.querySelectorAll('[style*="url"]').forEach((el) => {
-                    const styleAttr = el.getAttribute('style');
-                    if (styleAttr && styleAttr.includes('url(')) {
-                        const convertedStyle = convertCssUrlsToProxyAsset(styleAttr);
-                        el.setAttribute('style', convertedStyle);
-                    }
-                });
-
-                // 6. 이미지 수집
-                const imageUrls = new Set();
-                
-                document.querySelectorAll('img').forEach((img) => {
-                    const src = img.getAttribute('src');
-                    if (src && !imageUrls.has(src)) {
-                        imageUrls.add(src);
-                        resources.images.push({
-                            src: src,
-                            alt: img.getAttribute('alt') || '',
-                            title: img.getAttribute('title') || '',
-                            dataAttributes: Array.from(img.attributes)
-                                .filter(attr => attr.name.startsWith('data-'))
-                                .map(attr => ({ name: attr.name, value: attr.value }))
-                        });
-                    }
-                });
-
-                // picture 요소의 이미지
-                document.querySelectorAll('picture source').forEach((source) => {
-                    const srcset = source.getAttribute('srcset');
-                    if (srcset) {
-                        srcset.split(',').forEach(pair => {
-                            const url = pair.trim().split(' ')[0];
-                            if (url && !imageUrls.has(url)) {
-                                imageUrls.add(url);
-                                resources.images.push({
-                                    src: url,
-                                    srcset: true,
-                                    media: source.getAttribute('media')
-                                });
-                            }
-                        });
-                    }
-                });
-
-                // 7. KaTeX 리소스 수집
-                const katexLinks = document.querySelectorAll('link[href*="katex"]');
-                const katexScripts = document.querySelectorAll('script[src*="katex"]');
-                
-                katexLinks.forEach((link) => {
-                    resources.katexResources.push({
-                        type: 'link',
-                        href: link.getAttribute('href')
-                    });
-                });
-
-                katexScripts.forEach((script) => {
-                    resources.katexResources.push({
-                        type: 'script',
-                        src: script.getAttribute('src')
-                    });
-                });
-
-                // 8. 비디오 및 미디어 수집
-                document.querySelectorAll('video, audio').forEach((media) => {
-                    const src = media.getAttribute('src');
-                    if (src) {
-                        resources.videos.push({
-                            tag: media.tagName.toLowerCase(),
-                            src: src,
-                            type: media.getAttribute('type')
-                        });
-                    }
-                    
-                    // source 태그의 src도 수집
-                    media.querySelectorAll('source').forEach((source) => {
-                        const srcVal = source.getAttribute('src');
-                        if (srcVal) {
-                            resources.videos.push({
-                                tag: 'source',
-                                src: srcVal,
-                                type: source.getAttribute('type')
-                            });
-                        }
-                    });
-                });
-
-                // 9. _assets 폴더 참조 찾기 (CSS, script, img src에서)
-                const assetPattern = /_assets|/gm;
-                const allResourceText = JSON.stringify(resources);
-                
-                if (assetPattern.test(allResourceText)) {
-                    debugInfo.hasAssets = true;
-                }
-
-                // 10. 기타 확장자 리소스 수집 (SVG, WebP 등)
-                document.querySelectorAll('[href*="_assets"], [src*="_assets"]').forEach((el) => {
-                    const href = el.getAttribute('href') || el.getAttribute('src');
-                    if (href && !resources.otherAssets.some(a => a.url === href)) {
-                        resources.otherAssets.push({
-                            url: href,
-                            type: el.tagName.toLowerCase()
-                        });
-                    }
-                });
-
-                debugInfo.imageCount = resources.images.length;
-                debugInfo.scriptCount = resources.scripts.length;
-                debugInfo.iconCount = resources.icons.length;
-                debugInfo.fontCount = resources.fonts.length;
-                debugInfo.katexCount = resources.katexResources.length;
-                debugInfo.videoCount = resources.videos.length;
-                debugInfo.assetCount = resources.otherAssets.length;
-
-                // 메타 정보 함께 반환
-                return {
-                    detectedWidth: width,
-                    html: html,
-                    resources: resources,
-                    debug: debugInfo
-                };
-            }, options);
-
-            logger.info(`getPreviewData - Debug: ${JSON.stringify(result.debug)}`);
-            logger.info(`getPreviewData - Width: ${result.detectedWidth}`);
-            
-            // ⚠️ Debug: 서버 수신 HTML에서 mask 속성 확인
-            const maskMatches = result.html.match(/mask:\s*url\([^)]*\)/gi) || [];
-            logger.info(`[DEBUG] mask: url() patterns received from client: ${maskMatches.length}`);
-            maskMatches.slice(0, 3).forEach((match, idx) => {
-                logger.debug(`[DEBUG] Mask ${idx + 1}: ${match.substring(0, 100)}`);
-            });
-            
-            logger.info(`getPreviewData - Resources Summary:`);
-            logger.info(`  - CSS Links: ${result.resources.cssLinks.length}`);
-            logger.info(`  - Scripts: ${result.resources.scripts.length}`);
-            logger.info(`  - Inline Styles: ${result.resources.inlineStyles.length}`);
-            logger.info(`  - Images: ${result.resources.images.length}`);
-            logger.info(`  - Icons: ${result.resources.icons.length}`);
-            logger.info(`  - Fonts: ${result.resources.fonts.length}`);
-            logger.info(`  - KaTeX Resources: ${result.resources.katexResources.length}`);
-            logger.info(`  - Videos/Media: ${result.resources.videos.length}`);
-            logger.info(`  - Other Assets: ${result.resources.otherAssets.length}`);
-            
-            // 상세 로그 (DEBUG 레벨)
-            result.resources.cssLinks.forEach((css, idx) => {
-                logger.debug(`CSS[${idx + 1}]: ${css.href}`);
-            });
-            
-            result.resources.images.forEach((img, idx) => {
-                logger.debug(`Image[${idx + 1}]: ${img.src}`);
-            });
-            
-            result.resources.icons.forEach((icon, idx) => {
-                logger.debug(`Icon[${idx + 1}]: ${icon.href}`);
-            });
-            
-            result.resources.scripts.filter(s => s.type === 'external').forEach((script, idx) => {
-                logger.debug(`Script[${idx + 1}]: ${script.src}`);
-            });
-            
-            result.resources.katexResources.forEach((katex, idx) => {
-                logger.debug(`KaTeX[${idx + 1}]: ${katex.src || katex.href}`);
-            });
-
-            // 상대 경로를 절대 경로로 변환
-            result.html = this.convertRelativeToAbsolutePaths(result.html, url);
-            
-            // 모든 리소스 링크를 절대 경로로 변환
-            result.resources.cssLinks = result.resources.cssLinks.map(css => {
-                try {
-                    const converted = this.convertRelativeToAbsolutePaths(`<link href="${css.href}">`, url);
-                    const match = converted.match(/href="([^"]+)"/);
-                    const resolvedHref = match ? match[1] : css.href;
-                    return { ...css, href: resolvedHref };
-                } catch (err) {
-                    logger.warn(`Failed to convert CSS href: ${css.href} - ${err.message}`);
-                    return css;
-                }
-            });
-            
-            // 이미지 경로 변환
-            result.resources.images = result.resources.images.map(img => {
-                try {
-                    const converted = this.convertRelativeToAbsolutePaths(`<img src="${img.src}">`, url);
-                    const match = converted.match(/src="([^"]+)"/);
-                    const resolvedSrc = match ? match[1] : img.src;
-                    return { ...img, src: resolvedSrc };
-                } catch (err) {
-                    logger.warn(`Failed to convert image src: ${img.src} - ${err.message}`);
-                    return img;
-                }
-            });
-            
-            // 아이콘 경로 변환
-            result.resources.icons = result.resources.icons.map(icon => {
-                try {
-                    const converted = this.convertRelativeToAbsolutePaths(`<link href="${icon.href}">`, url);
-                    const match = converted.match(/href="([^"]+)"/);
-                    const resolvedHref = match ? match[1] : icon.href;
-                    return { ...icon, href: resolvedHref };
-                } catch (err) {
-                    logger.warn(`Failed to convert icon href: ${icon.href} - ${err.message}`);
-                    return icon;
-                }
-            });
-            
-            // 폰트 경로 변환
-            result.resources.fonts = result.resources.fonts.map(font => {
-                try {
-                    const converted = this.convertRelativeToAbsolutePaths(`<link href="${font.href}">`, url);
-                    const match = converted.match(/href="([^"]+)"/);
-                    const resolvedHref = match ? match[1] : font.href;
-                    return { ...font, href: resolvedHref };
-                } catch (err) {
-                    logger.warn(`Failed to convert font href: ${font.href} - ${err.message}`);
-                    return font;
-                }
-            });
-            
-            // 스크립트 경로 변환 (외부 스크립트만)
-            result.resources.scripts = result.resources.scripts.map(script => {
-                if (script.type === 'external') {
-                    try {
-                        const converted = this.convertRelativeToAbsolutePaths(`<script src="${script.src}"></script>`, url);
-                        const match = converted.match(/src="([^"]+)"/);
-                        const resolvedSrc = match ? match[1] : script.src;
-                        return { ...script, src: resolvedSrc };
-                    } catch (err) {
-                        logger.warn(`Failed to convert script src: ${script.src} - ${err.message}`);
-                        return script;
-                    }
-                }
-                return script;
-            });
-            
-            // KaTeX 리소스 경로 변환
-            result.resources.katexResources = result.resources.katexResources.map(katex => {
-                try {
-                    if (katex.type === 'link') {
-                        const converted = this.convertRelativeToAbsolutePaths(`<link href="${katex.href}">`, url);
-                        const match = converted.match(/href="([^"]+)"/);
-                        const resolvedHref = match ? match[1] : katex.href;
-                        return { ...katex, href: resolvedHref };
-                    } else {
-                        const converted = this.convertRelativeToAbsolutePaths(`<script src="${katex.src}"></script>`, url);
-                        const match = converted.match(/src="([^"]+)"/);
-                        const resolvedSrc = match ? match[1] : katex.src;
-                        return { ...katex, src: resolvedSrc };
-                    }
-                } catch (err) {
-                    logger.warn(`Failed to convert KaTeX resource - ${err.message}`);
-                    return katex;
-                }
-            });
-            
-            // 비디오/미디어 경로 변환
-            result.resources.videos = result.resources.videos.map(video => {
-                try {
-                    const converted = this.convertRelativeToAbsolutePaths(`<source src="${video.src}">`, url);
-                    const match = converted.match(/src="([^"]+)"/);
-                    const resolvedSrc = match ? match[1] : video.src;
-                    return { ...video, src: resolvedSrc };
-                } catch (err) {
-                    logger.warn(`Failed to convert video src: ${video.src} - ${err.message}`);
-                    return video;
-                }
-            });
-            
-            // 기타 assets 경로 변환
-            result.resources.otherAssets = result.resources.otherAssets.map(asset => {
-                try {
-                    const converted = this.convertRelativeToAbsolutePaths(`<a href="${asset.url}">`, url);
-                    const match = converted.match(/href="([^"]+)"/);
-                    const resolvedUrl = match ? match[1] : asset.url;
-                    return { ...asset, url: resolvedUrl };
-                } catch (err) {
-                    logger.warn(`Failed to convert asset url: ${asset.url} - ${err.message}`);
-                    return asset;
-                }
-            });
+            // 상세 로깅
+            this._logPreviewDataDetails(result);
 
             logger.info(`Preview data collected - Width: ${result.detectedWidth}, Resources - CSS: ${result.resources.cssLinks.length}, Images: ${result.resources.images.length}, Icons: ${result.resources.icons.length}, Fonts: ${result.resources.fonts.length}, Scripts: ${result.resources.scripts.length}, KaTeX: ${result.resources.katexResources.length}, Videos: ${result.resources.videos.length}`);
 
@@ -1099,7 +1225,235 @@ class PdfService {
      * @private
      */
     async _calculatePageDimensions(page, options) {
-        // ... (이미 구현됨)
+        const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = options;
+        
+        const dimensions = await page.evaluate(async (opts) => {
+            const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = opts;
+
+            // A. 너비 자동 감지
+            const contentEl = document.querySelector('.notion-page-content');
+            const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
+
+            // ✅ FIX: 너비를 축소하지 않도록 scale 계산 개선
+            // pageWidth가 지정되었을 때, 감지된 너비보다 작으면 무시하고 감지된 너비 사용
+            // (너비 축소로 인한 텍스트 줄바꿈 문제 해결)
+            const effectivePageWidth = (pageWidth && pageWidth >= detectedWidth) ? pageWidth : detectedWidth;
+            const scale = effectivePageWidth / detectedWidth;
+            
+            console.log(`[Dimensions] Detected: ${detectedWidth}px, Requested: ${pageWidth}px, Effective: ${effectivePageWidth}px, Scale: ${scale}`);
+            
+            const padTop = (Number(marginTop) || 0) / scale;
+            const padBottom = (Number(marginBottom) || 0) / scale;
+            const padLeft = (Number(marginLeft) || 0) / scale;
+            const padRight = (Number(marginRight) || 0) / scale;
+
+            // ✅ KaTeX CSS 명시적 로드
+            const loadKaTeXCSS = async () => {
+                return new Promise((resolve) => {
+                    const existingKaTeX = document.querySelector('link[href*="katex"]');
+                    if (existingKaTeX) {
+                        console.log('[KaTeX] CSS already loaded from CDN');
+                        resolve();
+                        return;
+                    }
+                    
+                    const link = document.createElement('link');
+                    link.rel = 'stylesheet';
+                    link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+                    link.crossOrigin = 'anonymous';
+                    
+                    link.onload = () => {
+                        console.log('[KaTeX] CSS loaded successfully');
+                        resolve();
+                    };
+                    
+                    link.onerror = () => {
+                        console.warn('[KaTeX] CSS load failed, continuing anyway');
+                        resolve();
+                    };
+                    
+                    setTimeout(resolve, 3000);
+                    document.head.appendChild(link);
+                });
+            };
+            
+            await loadKaTeXCSS();
+
+            // 시각적 완성 대기
+            async function waitForVisualComplete() {
+                console.time("VisualComplete");
+
+                try {
+                    await Promise.race([
+                        document.fonts.ready,
+                        new Promise(resolve => setTimeout(resolve, 5000))
+                    ]);
+                } catch (err) {
+                    console.warn(`Font loading timeout/error: ${err.message}`);
+                }
+
+                const visibleImages = Array.from(document.querySelectorAll('img'))
+                    .filter(img => {
+                        if (!img.src) return false;
+                        const rect = img.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0;
+                    })
+                    .slice(0, 50);
+                
+                const imagePromises = visibleImages.map(img => {
+                    return Promise.race([
+                        img.decode().catch(err => {
+                            console.warn(`이미지 디코딩 실패: ${img.src}`, err);
+                        }),
+                        new Promise(resolve => setTimeout(resolve, 1000))
+                    ]);
+                });
+                
+                await Promise.all(imagePromises);
+
+                try {
+                    const hasKaTeX = document.querySelectorAll('.katex').length > 0;
+                    if (hasKaTeX) {
+                        console.log(`[KaTeX] Found ${document.querySelectorAll('.katex').length} KaTeX elements`);
+                        await new Promise((resolve) => {
+                            let isStable = false;
+                            let checkCount = 0;
+                            const maxChecks = 10;
+                            
+                            const checkKaTeXReady = () => {
+                                checkCount++;
+                                const currentKaTeXCount = document.querySelectorAll('.katex').length;
+                                console.log(`[KaTeX] Check ${checkCount}: ${currentKaTeXCount} elements`);
+                                
+                                if (isStable || checkCount >= maxChecks) {
+                                    console.log(`[KaTeX] Rendering stable at check ${checkCount}`);
+                                    resolve();
+                                } else {
+                                    if (checkCount > 1 && currentKaTeXCount === 
+                                        (window._previousKaTeXCount || 0)) {
+                                        isStable = true;
+                                        console.log(`[KaTeX] Rendering complete`);
+                                        resolve();
+                                    }
+                                    window._previousKaTeXCount = currentKaTeXCount;
+                                    setTimeout(checkKaTeXReady, 500);
+                                }
+                            };
+                            
+                            checkKaTeXReady();
+                        });
+                    }
+                    
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        console.log(`[MathJax] Found, waiting for typeset...`);
+                        try {
+                            await Promise.race([
+                                window.MathJax.typesetPromise(),
+                                new Promise(resolve => setTimeout(resolve, 3000))
+                            ]);
+                            console.log(`[MathJax] Typeset complete`);
+                        } catch (err) {
+                            console.warn(`MathJax typeset error: ${err.message}`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn(`KaTeX/MathJax check failed: ${err.message}`);
+                }
+
+                return new Promise(resolve => {
+                    requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        console.timeEnd("VisualComplete");
+                        resolve(true);
+                    });
+                    });
+                });
+            }
+
+            await waitForVisualComplete();
+
+            // 레이아웃 고정 CSS 생성 + 페이지 너비 제약
+            let freezeCSS = "";
+            const layoutElements = document.querySelectorAll('.notion-image-block, .notion-asset-wrapper, div[data-block-id][style*="width"]');
+            layoutElements.forEach((el, index) => {
+                const id = `sn-freeze-${index}`;
+                el.dataset.snFreeze = id;
+                const rect = el.getBoundingClientRect();
+                freezeCSS += `
+                    [data-sn-freeze="${id}"] {
+                        width: ${rect.width}px !important;
+                        max-width: ${rect.width}px !important;
+                        min-width: ${rect.width}px !important;
+                        ${(el.classList.contains('notion-image-block') || el.classList.contains('notion-asset-wrapper')) ? `height: ${rect.height}px !important;` : ''}
+                    }\n`;
+            });
+
+
+
+            // 동적 스타일 생성
+            const padTopIdx = includeBanner ? 3 : (includeTags ? 4 : 5);
+            const totalLayoutWidth = detectedWidth + padLeft + padRight;
+            
+            const styleTag = document.createElement('style');
+            styleTag.id = 'sn-pdf-freeze-style';
+            styleTag.innerHTML = freezeCSS;
+            document.head.appendChild(styleTag);
+
+            // 공백 및 개행 처리
+            const spans = document.querySelectorAll('span[data-token-index="0"]');
+            spans.forEach(span => {
+                let text = span.textContent;
+                if (text.includes(" ")) text = text.replace(/ /g, '\u00A0');
+                if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0');
+                span.textContent = text;
+            });
+
+            window.dispatchEvent(new Event('resize'));
+            
+            // 페이지 복잡도에 따른 동적 대기
+            const elementCount = document.querySelectorAll('*').length;
+            const hasKaTeX = document.querySelectorAll('.katex').length > 0;
+            const hasMathJax = !!window.MathJax;
+            
+            let waitTime = 2000;
+            
+            if (hasKaTeX || hasMathJax) {
+                waitTime = Math.max(2500, waitTime);
+                console.log(`KaTeX/MathJax detected, increasing wait time to ${waitTime}ms`);
+            }
+            
+            if (elementCount > 5000) waitTime = Math.max(3000, waitTime);
+            else if (elementCount > 1000) waitTime = Math.max(2500, waitTime);
+            else waitTime = Math.max(1500, waitTime);
+            
+            await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, waitTime)));
+
+            // 최종 높이 재계산
+            const selectors = ['.notion-page-content', '.layout'];
+            let contentHeight = 0;
+            for (const selector of selectors) {
+                const el = document.querySelector(selector);
+                if (el) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.height > contentHeight) contentHeight = rect.height;
+                }
+            }
+
+            if (contentHeight < document.body.scrollHeight) contentHeight = document.body.scrollHeight;
+            
+            return {
+                height: Math.ceil(contentHeight),
+                width: detectedWidth,
+                padTop: padTop,
+                padBottom: padBottom,
+                padLeft: padLeft,
+                padRight: padRight,
+                scale: scale
+            };
+        }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
+
+        logger.info(`Calculated dimensions - Detected Width: ${dimensions.width}px, Scale: ${dimensions.scale}, Effective Width: ${dimensions.width * dimensions.scale}px`);
+        return dimensions;
     }
 
     /**
@@ -1179,17 +1533,79 @@ class PdfService {
         const finalHeight = Math.ceil(dimensions.height) + 100;
         const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
         
-        logger.info(`Adjusting viewport to ${finalWidth}x${finalHeight}`);
+        // ✅ Notion의 반응형 레이아웃 유지를 위해 큰 viewport 유지
+        // Notion은 일정 뷰포트 이상에서 콘텐츠 크기가 고정되므로 필요
+        logger.info(`Adjusting viewport to ${finalWidth + 1000}x${finalHeight}`);
         await page.setViewport({ width: finalWidth + 1000, height: finalHeight });
         
         // 레이아웃 안정화 대기
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // ✅ Viewport 변경 후 고정 CSS 재생성
+        // 이전에 3000x1000 viewport에서 생성된 CSS를 현재 viewport에 맞게 재적용
+        await this._reapplyFreezeCSS(page);
+        
+        // 최종 레이아웃 안정화
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         const scale = dimensions.scale;
         const pdfWidth = finalWidth * scale;
         const pdfHeight = finalHeight * scale;
         
+        logger.info(`Final viewport set - Width: ${finalWidth + 1000}px, PDF dimensions: ${pdfWidth}px x ${pdfHeight}px`);
+        
         return { pdfWidth, pdfHeight, scale };
+    }
+
+    /**
+     * Viewport 변경 후 레이아웃 고정 CSS를 재생성하고 적용합니다
+     * 
+     * Viewport 크기 변경으로 인해 레이아웃이 재계산될 때,
+     * 이미지와 고정폭 요소들의 새로운 크기를 바탕으로 freezeCSS를 재생성합니다.
+     * 이를 통해 PDF 렌더링 시 레이아웃이 안정적으로 유지됩니다.
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _reapplyFreezeCSS(page) {
+        logger.info('Reapplying freeze CSS after viewport adjustment');
+        
+        await page.evaluate(() => {
+            // 기존 freeze style 제거
+            const oldStyle = document.getElementById('sn-pdf-freeze-style');
+            if (oldStyle) {
+                oldStyle.remove();
+                console.log('[ReapplyCSS] Removed old freeze style');
+            }
+
+            // 새로운 freeze CSS 생성
+            let newFreezeCSS = "";
+            const layoutElements = document.querySelectorAll('.notion-image-block, .notion-asset-wrapper, div[data-block-id][style*="width"]');
+            
+            layoutElements.forEach((el, index) => {
+                const id = `sn-refreeze-${index}`;
+                el.dataset.snReFreeze = id;
+                const rect = el.getBoundingClientRect();
+                
+                // 새로운 viewport에서의 실제 크기 기반으로 CSS 생성
+                newFreezeCSS += `
+                    [data-sn-refreeze="${id}"] {
+                        width: ${rect.width}px !important;
+                        max-width: ${rect.width}px !important;
+                        min-width: ${rect.width}px !important;
+                        ${(el.classList.contains('notion-image-block') || el.classList.contains('notion-asset-wrapper')) ? `height: ${rect.height}px !important;` : ''}
+                    }\n`;
+            });
+
+            // 새로운 style 태그 생성 및 적용
+            const newStyleTag = document.createElement('style');
+            newStyleTag.id = 'sn-pdf-freeze-style';
+            newStyleTag.innerHTML = newFreezeCSS;
+            document.head.appendChild(newStyleTag);
+            
+            console.log(`[ReapplyCSS] Applied new freeze CSS for ${layoutElements.length} elements`);
+        });
     }
 
     /**

@@ -26,7 +26,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('상대 경로를 절대 경로로 변환해야 함', () => {
             // Arrange
             const html = '<img src="image.png">';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             const expectedOutput = '<img src="https://notion.so/image.png">';
             
             URLPathConverter.convertAll.mockReturnValue(expectedOutput);
@@ -92,7 +92,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('절대 경로 URL(http)은 변경하지 않아야 함', () => {
             // Arrange
             const html = '<img src="http://example.com/image.png">';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             
             URLPathConverter.convertAll.mockReturnValue(html);
 
@@ -106,7 +106,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('절대 경로 URL(https)은 변경하지 않아야 함', () => {
             // Arrange
             const html = '<img src="https://cdn.example.com/image.png">';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             
             URLPathConverter.convertAll.mockReturnValue(html);
 
@@ -120,7 +120,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('프로토콜 상대 URL(//)은 변경하지 않아야 함', () => {
             // Arrange
             const html = '<img src="//cdn.example.com/image.png">';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             
             URLPathConverter.convertAll.mockReturnValue(html);
 
@@ -136,7 +136,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('빈 HTML 문자열 처리', () => {
             // Arrange
             const html = '';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             
             URLPathConverter.convertAll.mockReturnValue('');
 
@@ -151,8 +151,8 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('baseUrl이 슬래시로 끝나는 경우 올바르게 처리', () => {
             // Arrange
             const html = '<img src="image.png">';
-            const baseUrl = 'https://notion.so/page/';
-            const expectedOutput = '<img src="https://notion.so/page/image.png">';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8/';
+            const expectedOutput = '<img src="https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8/image.png">';
             
             URLPathConverter.convertAll.mockReturnValue(expectedOutput);
 
@@ -167,7 +167,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('따옴표 없는 경로도 처리해야 함', () => {
             // Arrange
             const html = '<img src=image.png>';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             const expectedOutput = '<img src=https://notion.so/image.png>';
             
             URLPathConverter.convertAll.mockReturnValue(expectedOutput);
@@ -182,7 +182,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('특수 문자가 포함된 URL 처리', () => {
             // Arrange
             const html = '<img src="images/photo%20name.png">';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             const expectedOutput = '<img src="https://notion.so/images/photo%20name.png">';
             
             URLPathConverter.convertAll.mockReturnValue(expectedOutput);
@@ -197,7 +197,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('쿼리 매개변수가 있는 URL 처리', () => {
             // Arrange
             const html = '<img src="image.png?size=large&format=webp">';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             const expectedOutput = '<img src="https://notion.so/image.png?size=large&format=webp">';
             
             URLPathConverter.convertAll.mockReturnValue(expectedOutput);
@@ -229,7 +229,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('URLPathConverter.convertAll이 정확히 한 번 호출되어야 함', () => {
             // Arrange
             const html = '<img src="image.png">';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             
             URLPathConverter.convertAll.mockReturnValue(html);
 
@@ -244,7 +244,7 @@ describe('PdfService - URL 경로 변환 (convertRelativeToAbsolutePaths)', () =
         test('변환된 HTML을 그대로 반환해야 함', () => {
             // Arrange
             const html = '<div></div>';
-            const baseUrl = 'https://notion.so/page';
+            const baseUrl = 'https://cloudier338.notion.site/TEST-Text-001-Text-Heading-Format-List-Checkbox-314fc609de7380f08407d60b1a74b8e8';
             const expectedOutput = '<div class="converted"></div>';
             
             URLPathConverter.convertAll.mockReturnValue(expectedOutput);
