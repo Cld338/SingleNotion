@@ -9,11 +9,7 @@ tests/unit/
 ├── TEST_STRATEGY.md                    # 테스트 전략 계획
 ├── TEST_EXECUTION_GUIDE.md             # 테스트 실행 가이드
 ├── pdfService.urlPathConversion.test.js    # URL 경로 변환 테스트 (10개)
-├── pdfService.cssConversion.test.js        # CSS 변환 테스트 (25개)
-├── pdfService.previewData.test.js          # 미리보기 수집 테스트 (20개)
-├── pdfService.pdfGeneration.test.js        # PDF 생성 테스트 (22개)
-├── pdfService.resourceCleanup.test.js      # 리소스 정리 테스트 (24개)
-└── pdfService.serviceCleanup.test.js       # 서비스 종료 테스트 (22개)
+
 ```
 
 ---

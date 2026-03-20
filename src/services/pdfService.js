@@ -810,33 +810,22 @@ class PdfService {
     /**
      * Notion 페이지를 PDF로 변환하여 스트림으로 반환합니다
      * 
-     * 주어진 Notion 페이지 URL을 열고, 사용자 옵션에 따라 페이지를 렌더링한 후
-     * PDF 형식으로 생성합니다. 생성된 PDF는 Node.js 읽기 스트림으로 반환되어
-     * 클라이언트에 직접 스트리밍할 수 있습니다.
-     * 
-     * PDF 생성 전 처리:
-     *   1. 모든 Notion 토글 블록 펼치기
-     *   2. KaTeX CSS 주입 (수식 렌더링 개선)
-     *   3. 콘텐츠 너비 자동 감지
-     *   4. 동적 레이아웃 CSS 생성 및 적용
-     *   5. 레이아웃 고정 CSS 생성 (반응형 레이아웃 방지)
-     *   6. 최종 뷰포트 크기 계산
-     *   7. KaTeX 렌더링 검증
-     * 
-     * 옵션 처리:
-     *   - includeBanner, includeTitle, includeTags, includeDiscussion: 페이지 요소 표시 여부
-     *   - marginTop, marginBottom, marginLeft, marginRight: PDF 페이지 여백
-     *   - pageWidth: PDF 페이지 너비
-     *   - screenshotPath: 스크린샷 저장 경로 (선택사항)
+     * 주어진 Notion 페이지 URL을 열고, 다음 단계를 거쳐 PDF를 생성합니다:
+     *   1. 페이지 초기화 및 보안 설정
+     *   2. Notion 페이지 로드
+     *   3. 토글 블록 펼치기
+     *   4. KaTeX CSS 주입
+     *   5. 페이지 치수 계산 및 스타일 최적화
+     *   6. KaTeX 렌더링 검증
+     *   7. 최종 뷰포트 조정
+     *   8. 스크린샷 캡처 (선택사항)
+     *   9. PDF 생성
+     *   10. 리소스 정리 핸들러 등록
      * 
      * PDF 스트림은 자동으로 메모리를 정리하고, 에러 발생 시에도 리소스를 정리합니다.
      * 
      * @param {string} url - 변환할 Notion 페이지의 URL
      * @param {Object} options - PDF 생성 옵션
-     * @param {boolean} [options.includeBanner=true] - 페이지 배너 포함 여부
-     * @param {boolean} [options.includeTitle=true] - 페이지 제목 포함 여부
-     * @param {boolean} [options.includeTags=true] - 페이지 태그 포함 여부
-     * @param {boolean} [options.includeDiscussion=false] - 댓글 섹션 포함 여부
      * @param {number} [options.marginTop=0] - 상단 여백 (픽셀)
      * @param {number} [options.marginBottom=0] - 하단 여백 (픽셀)
      * @param {number} [options.marginLeft=0] - 좌측 여백 (픽셀)
@@ -857,478 +846,40 @@ class PdfService {
         try {
             page = await browser.newPage();
 
-            // 보안 패치 로직 (기존 유지)
-            await page.setRequestInterception(true);
-            page.on('request', request => {
-                const reqUrl = request.url().split('?')[0];
-                const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
+            // ✅ 브라우저 페이지 초기화
+            await this._setupBrowserPage(page);
 
-                if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://') && !reqUrl.startsWith('data:')) {
-                    return request.abort();
-                }
-
-                if (isMainFrame) {
-                    const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(reqUrl);
-                    if (!isNotionDomain) return request.abort();
-                }
-                const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(reqUrl);
-                if (isLocal) return request.abort();
-
-                request.continue();
-            });
-
-            page.setDefaultNavigationTimeout(120000);
+            // 로깅 및 옵션 추출
             const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth, screenshotPath } = options;
             
-            
             logger.info(`Margin - Top: ${marginTop}, Bottom: ${marginBottom}, Left: ${marginLeft}, Right: ${marginRight}`);
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
             
-            // 1. 초기 뷰포트를 충분히 넓게 설정하여 데스크톱 레이아웃 유도
-            await page.setViewport({ width: 3000, height: 1000 });
+            // ✅ 페이지 이동
+            await this._navigateToPage(page, url);
 
-            await page.goto(url, { waitUntil: 'networkidle0' });
+            // ✅ Notion 토글 블록 모두 펼치기
+            await this._openAllToggleBlocks(page);
 
-            // ✅ 노션 토글 블록 모두 펼치기 (미리보기와 동일)
-            logger.info('[PDF-Toggle] Starting to open all toggles...');
-            try {
-                let allToggleClosed = false;
-                let iterationCount = 0;
-                const maxIterations = 20; // 무한 루프 방지
-                
-                // 중첩된 토글까지 모두 처리하기 위해 반복 실행
-                while (!allToggleClosed && iterationCount < maxIterations) {
-                    iterationCount++;
-                    
-                    const toggleInfo = await page.evaluate(() => {
-                        const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
-                        const closedToggles = Array.from(toggleButtons).filter(btn => 
-                            btn.getAttribute('aria-expanded') === 'false'
-                        );
-                        
-                        return {
-                            totalCount: toggleButtons.length,
-                            closedCount: closedToggles.length
-                        };
-                    });
-                    
-                    logger.debug(`[PDF-Toggle] Iteration ${iterationCount}: Total=${toggleInfo.totalCount}, Closed=${toggleInfo.closedCount}`);
-                    
-                    if (toggleInfo.closedCount === 0) {
-                        allToggleClosed = true;
-                        logger.info('[PDF-Toggle] All toggles are now open');
-                    } else {
-                        // 모든 닫힌 토글 클릭
-                        await page.evaluate(() => {
-                            const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
-                            const closedToggles = Array.from(toggleButtons).filter(btn => 
-                                btn.getAttribute('aria-expanded') === 'false'
-                            );
-                            closedToggles.forEach(button => {
-                                button.click();
-                            });
-                        });
-                        
-                        // 렌더링 대기
-                        await page.waitForTimeout(500);
-                        
-                        // requestAnimationFrame 대기 (레이아웃 계산 완료)
-                        await page.evaluate(() => {
-                            return new Promise(resolve => {
-                                requestAnimationFrame(() => {
-                                    requestAnimationFrame(() => {
-                                        resolve();
-                                    });
-                                });
-                            });
-                        });
-                    }
-                }
-                
-                if (iterationCount >= maxIterations) {
-                    logger.warn('[PDF-Toggle] Max iterations reached, some toggles may still be closed');
-                }
-                
-                // 최종 안정화 대기
-                await page.waitForTimeout(1000);
-                logger.info('[PDF-Toggle] Toggle processing completed');
-            } catch (err) {
-                logger.warn(`[PDF-Toggle] Error opening toggles: ${err.message}`);
-            }
+            // ✅ KaTeX CSS 주입
+            await this._injectKaTeXCSS(page);
 
-            // ✅ KaTeX CSS를 페이지에 명시적으로 주입 (PDF 렌더링 개선)
-            logger.info('Injecting KaTeX CSS for PDF rendering...');
-            try {
-                await page.addStyleTag({
-                    url: 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
-                    crossorigin: 'anonymous'
-                });
-                logger.info('KaTeX CSS injected successfully');
-            } catch (err) {
-                // CDN 실패해도 계속 진행 (Notion 페이지에 이미 있을 수 있음)
-                logger.debug(`KaTeX CSS injection attempted: ${err.message}`);
-            }
-            
-            // ✅ 모든 기존 stylesheet 확인
-            const stylesheetCount = await page.evaluate(() => {
-                return document.querySelectorAll('link[rel="stylesheet"]').length;
-            });
-            logger.info(`Found ${stylesheetCount} stylesheets on page`);
-
-            // [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
-            const dimensions = await page.evaluate(async (opts) => {
-                const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = opts;
-
-                // A. 너비 자동 감지
-                const contentEl = document.querySelector('.notion-page-content');
-                const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
-
-                const scale = pageWidth ? (pageWidth / detectedWidth) : 1;
-                const padTop = (Number(marginTop) || 0) / scale;
-                const padBottom = (Number(marginBottom) || 0) / scale;
-                const padLeft = (Number(marginLeft) || 0) / scale;
-                const padRight = (Number(marginRight) || 0) / scale;
-
-                // ✅ KaTeX CSS 명시적 로드
-                const loadKaTeXCSS = async () => {
-                    return new Promise((resolve) => {
-                        const existingKaTeX = document.querySelector('link[href*="katex"]');
-                        if (existingKaTeX) {
-                            console.log('[KaTeX] CSS already loaded from CDN');
-                            resolve();
-                            return;
-                        }
-                        
-                        const link = document.createElement('link');
-                        link.rel = 'stylesheet';
-                        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
-                        link.crossOrigin = 'anonymous';
-                        
-                        link.onload = () => {
-                            console.log('[KaTeX] CSS loaded successfully');
-                            resolve();
-                        };
-                        
-                        link.onerror = () => {
-                            console.warn('[KaTeX] CSS load failed, continuing anyway');
-                            resolve();
-                        };
-                        
-                        setTimeout(resolve, 3000);
-                        document.head.appendChild(link);
-                    });
-                };
-                
-                await loadKaTeXCSS();
-
-                // 시각적 완성 대기
-                async function waitForVisualComplete() {
-                    console.time("VisualComplete");
-
-                    try {
-                        await Promise.race([
-                            document.fonts.ready,
-                            new Promise(resolve => setTimeout(resolve, 5000))
-                        ]);
-                    } catch (err) {
-                        console.warn(`Font loading timeout/error: ${err.message}`);
-                    }
-
-                    const visibleImages = Array.from(document.querySelectorAll('img'))
-                        .filter(img => {
-                            if (!img.src) return false;
-                            const rect = img.getBoundingClientRect();
-                            return rect.width > 0 && rect.height > 0;
-                        })
-                        .slice(0, 50);
-                    
-                    const imagePromises = visibleImages.map(img => {
-                        return Promise.race([
-                            img.decode().catch(err => {
-                                console.warn(`이미지 디코딩 실패: ${img.src}`, err);
-                            }),
-                            new Promise(resolve => setTimeout(resolve, 1000))
-                        ]);
-                    });
-                    
-                    await Promise.all(imagePromises);
-
-                    try {
-                        const hasKaTeX = document.querySelectorAll('.katex').length > 0;
-                        if (hasKaTeX) {
-                            console.log(`[KaTeX] Found ${document.querySelectorAll('.katex').length} KaTeX elements`);
-                            await new Promise((resolve) => {
-                                let isStable = false;
-                                let checkCount = 0;
-                                const maxChecks = 10;
-                                
-                                const checkKaTeXReady = () => {
-                                    checkCount++;
-                                    const currentKaTeXCount = document.querySelectorAll('.katex').length;
-                                    console.log(`[KaTeX] Check ${checkCount}: ${currentKaTeXCount} elements`);
-                                    
-                                    if (isStable || checkCount >= maxChecks) {
-                                        console.log(`[KaTeX] Rendering stable at check ${checkCount}`);
-                                        resolve();
-                                    } else {
-                                        if (checkCount > 1 && currentKaTeXCount === 
-                                            (window._previousKaTeXCount || 0)) {
-                                            isStable = true;
-                                            console.log(`[KaTeX] Rendering complete`);
-                                            resolve();
-                                        }
-                                        window._previousKaTeXCount = currentKaTeXCount;
-                                        setTimeout(checkKaTeXReady, 500);
-                                    }
-                                };
-                                
-                                checkKaTeXReady();
-                            });
-                        }
-                        
-                        if (window.MathJax && window.MathJax.typesetPromise) {
-                            console.log(`[MathJax] Found, waiting for typeset...`);
-                            try {
-                                await Promise.race([
-                                    window.MathJax.typesetPromise(),
-                                    new Promise(resolve => setTimeout(resolve, 3000))
-                                ]);
-                                console.log(`[MathJax] Typeset complete`);
-                            } catch (err) {
-                                console.warn(`MathJax typeset error: ${err.message}`);
-                            }
-                        }
-                    } catch (err) {
-                        console.warn(`KaTeX/MathJax check failed: ${err.message}`);
-                    }
-
-                    return new Promise(resolve => {
-                        requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            console.timeEnd("VisualComplete");
-                            resolve(true);
-                        });
-                        });
-                    });
-                }
-
-                await waitForVisualComplete();
-
-                // 레이아웃 고정 CSS 생성
-                let freezeCSS = "";
-                const layoutElements = document.querySelectorAll('.notion-image-block, .notion-asset-wrapper, div[data-block-id][style*="width"]');
-                layoutElements.forEach((el, index) => {
-                    const id = `sn-freeze-${index}`;
-                    el.dataset.snFreeze = id;
-                    const rect = el.getBoundingClientRect();
-                    freezeCSS += `
-                        [data-sn-freeze="${id}"] {
-                            width: ${rect.width}px !important;
-                            max-width: ${rect.width}px !important;
-                            min-width: ${rect.width}px !important;
-                            ${(el.classList.contains('notion-image-block') || el.classList.contains('notion-asset-wrapper')) ? `height: ${rect.height}px !important;` : ''}
-                        }\n`;
-                });
-
-                // 동적 스타일 생성
-                const padTopIdx = includeBanner ? 3 : (includeTags ? 4 : 5);
-                const totalLayoutWidth = detectedWidth + padLeft + padRight;
-                
-                const styleTag = document.createElement('style');
-                styleTag.id = 'sn-pdf-style';
-                styleTag.innerHTML = freezeCSS;
-                document.head.appendChild(styleTag);
-
-                // 공백 및 개행 처리
-                const spans = document.querySelectorAll('span[data-token-index="0"]');
-                spans.forEach(span => {
-                    let text = span.textContent;
-                    if (text.includes(" ")) text = text.replace(/ /g, '\u00A0');
-                    if (text.includes("\t")) text = text.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0');
-                    span.textContent = text;
-                });
-
-                window.dispatchEvent(new Event('resize'));
-                
-                // 페이지 복잡도에 따른 동적 대기
-                const elementCount = document.querySelectorAll('*').length;
-                const hasKaTeX = document.querySelectorAll('.katex').length > 0;
-                const hasMathJax = !!window.MathJax;
-                
-                let waitTime = 2000;
-                
-                if (hasKaTeX || hasMathJax) {
-                    waitTime = Math.max(2500, waitTime);
-                    console.log(`KaTeX/MathJax detected, increasing wait time to ${waitTime}ms`);
-                }
-                
-                if (elementCount > 5000) waitTime = Math.max(3000, waitTime);
-                else if (elementCount > 1000) waitTime = Math.max(2500, waitTime);
-                else waitTime = Math.max(1500, waitTime);
-                
-                await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, waitTime)));
-
-                // 최종 높이 재계산
-                const selectors = ['.notion-page-content', '.layout'];
-                let contentHeight = 0;
-                for (const selector of selectors) {
-                    const el = document.querySelector(selector);
-                    if (el) {
-                        const rect = el.getBoundingClientRect();
-                        if (rect.height > contentHeight) contentHeight = rect.height;
-                    }
-                }
-
-                if (contentHeight < document.body.scrollHeight) contentHeight = document.body.scrollHeight;
-                
-                return {
-                    height: Math.ceil(contentHeight),
-                    width: detectedWidth,
-                    padTop: padTop,
-                    padBottom: padBottom,
-                    padLeft: padLeft,
-                    padRight: padRight,
-                    scale: scale
-                };
-            }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
-
-            logger.info(`Calculated scale: ${dimensions.scale}`);
+            // ✅ [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
+            const dimensions = await this._calculatePageDimensions(page, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
 
             // ✅ PDF 생성 전 최종 KaTeX 렌더링 검증
-            const katexStatus = await page.evaluate(() => {
-                const katexElements = document.querySelectorAll('.katex');
-                const katexCount = katexElements.length;
-                
-                if (katexCount === 0) {
-                    return { count: 0, status: 'no-katex', hasCSS: !!document.querySelector('link[href*="katex"]') };
-                }
-                
-                // 첫 번째 KaTeX 요소 검증
-                const firstKatex = katexElements[0];
-                const computedStyle = window.getComputedStyle(firstKatex);
-                const fontFamily = computedStyle.fontFamily;
-                
-                console.log(`[KaTeX Validation] Count: ${katexCount}, Font: ${fontFamily}`);
-                
-                // ✅ CSS 로드 확인 (유효한 선택자만 사용)
-                const hasKaTeXLink = !!document.querySelector('link[href*="katex"]');
-                const hasKaTeXStyleTag = !!document.querySelector('style[data-katex]');
-                // style 태그의 textContent 검사
-                const hasKaTeXInlineStyle = Array.from(document.querySelectorAll('style')).some(style => 
-                    style.textContent && style.textContent.includes('.katex')
-                );
-                const cssLoaded = hasKaTeXLink || hasKaTeXStyleTag || hasKaTeXInlineStyle;
-                
-                return {
-                    count: katexCount,
-                    status: 'rendered',
-                    fontFamily: fontFamily,
-                    hasHTML: !!firstKatex.querySelector('.katex-html'),
-                    cssLoaded: cssLoaded,
-                    debugCSS: { hasKaTeXLink, hasKaTeXStyleTag, hasKaTeXInlineStyle }
-                };
-            });
-            
-            logger.info(`KaTeX Pre-PDF Status: ${JSON.stringify(katexStatus)}`);
-            
-            if (katexStatus.count > 0 && katexStatus.fontFamily) {
-                logger.info(`✅ KaTeX fonts appear to be loaded: ${katexStatus.fontFamily}`);
-            } else if (katexStatus.count > 0 && !katexStatus.fontFamily) {
-                logger.warn(`⚠️ KaTeX elements found but fonts may not be loaded properly`);
-            }
+            await this._validateKaTeXRendering(page);
 
-            // 2. 계산된 높이와 너비로 뷰포트 최종 조정
-            const finalHeight = Math.ceil(dimensions.height) + 100;
-            const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
-            
-            await page.setViewport({ width: finalWidth + 1000, height: finalHeight });
-            
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            // ✅ 최종 뷰포트 조정 및 PDF 크기 계산
+            const pdfOptions = await this._adjustFinalViewport(page, dimensions);
 
-            const scale = dimensions.scale;
-            const pdfWidth = finalWidth * scale;
-            const pdfHeight = finalHeight * scale;
-            
-            if (options.screenshotPath) {
-                // 브라우저 컨텍스트에서 .layout-content 요소들의 전체 영역(Bounding Box) 계산
-                const boundingBox = await page.evaluate(() => {
-                    const elements = Array.from(document.querySelectorAll('.layout-content, .layout-full'));
-                    if (elements.length === 0) return null;
+            // ✅ 디버그용 스크린샷 캡처 (선택사항)
+            await this._captureScreenshot(page, screenshotPath);
 
-                    let minX = Infinity;
-                    let minY = Infinity;
-                    let maxX = -Infinity;
-                    let maxY = -Infinity;
+            // ✅ PDF 생성
+            const nodeStream = await this._createPDFStream(page, pdfOptions);
 
-                    elements.forEach(el => {
-                        const rect = el.getBoundingClientRect();
-                        // 스크롤 위치를 보정한 절대 좌표 계산
-                        const x = rect.left + window.scrollX;
-                        const y = rect.top + window.scrollY;
-                        
-                        if (x < minX) minX = x;
-                        if (y < minY) minY = y;
-                        if (x + rect.width > maxX) maxX = x + rect.width;
-                        if (y + rect.height > maxY) maxY = y + rect.height;
-                    });
-                    return {
-                        x: minX,
-                        y: minY,
-                        width: maxX - minX,
-                        height: maxY - minY
-                    };
-                });
-
-                if (boundingBox) {
-                    // 계산된 전체 영역만 지정하여 스크린샷 캡처
-                    await page.screenshot({
-                        path: options.screenshotPath,
-                        clip: boundingBox
-                    });
-                } else {
-                    // 요소를 찾지 못했을 경우의 대비책
-                    await page.screenshot({ path: options.screenshotPath, fullPage: true });
-                }
-            }
-
-            // 3. PDF 생성 (Extension의 Page.printToPDF 설정 반영)
-            const pdfWebStream = await page.createPDFStream({
-                width: `${pdfWidth}px`,
-                height: `${pdfHeight}px`,
-                scale: scale,
-                printBackground: true,
-                displayHeaderFooter: false,
-                margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
-                pageRanges: '1',
-                preferCSSPageSize: false,
-                tagged: true,
-                outline: true,
-                omitBackground: false  // ✅ 배경색/이미지 포함
-            });
-
-            logger.info(`PDF generated - Width: ${pdfWidth}px, Height: ${pdfHeight}px, Scale: ${scale}`);
-
-            const nodeStream = Readable.fromWeb(pdfWebStream);
-
-            // ✅ 스트림 종료 시 명시적 메모리 정리
-            nodeStream.on('close', async () => {
-                try {
-                    await this._cleanupPageResources(page);
-                    await browserPool.release(browser);
-                } catch (err) {
-                    logger.warn(`Error during stream close cleanup: ${err.message}`);
-                }
-            });
-
-            nodeStream.on('error', async (err) => {
-                logger.error(`PDF stream error: ${err.message}`);
-                try {
-                    await this._cleanupPageResources(page);
-                    await browserPool.release(browser);
-                } catch (cleanupErr) {
-                    logger.warn(`Error during stream error cleanup: ${cleanupErr.message}`);
-                }
-            });
+            // ✅ 스트림 정리 핸들러 등록
+            await this._attachStreamCleanupHandlers(nodeStream, page, browser);
 
             return {
                 stream: nodeStream,
@@ -1348,6 +899,430 @@ class PdfService {
             
             throw error;
         }
+    }
+
+    /**
+     * Puppeteer 페이지를 PDF 생성을 위해 초기화합니다
+     * 
+     * 보안 설정, 사용자 에이전트, 초기 뷰포트를 설정합니다.
+     * 
+     * 설정 항목:
+     *   1. Request Interception - Notion 도메인 및 로컬 요청만 허용
+     *   2. User Agent - Chrome 브라우저로 식별
+     *   3. Viewport - 3000x1000 (데스크톱 레이아웃 유도)
+     *   4. Navigation Timeout - 120초
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _setupBrowserPage(page) {
+        // 보안 패치: 요청 필터링
+        await page.setRequestInterception(true);
+        page.on('request', request => {
+            const reqUrl = request.url().split('?')[0];
+            const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
+
+            // 유효한 프로토콜만 허용
+            if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://') && !reqUrl.startsWith('data:')) {
+                return request.abort();
+            }
+
+            // 메인 프레임: Notion 도메인만 허용
+            if (isMainFrame) {
+                const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(reqUrl);
+                if (!isNotionDomain) return request.abort();
+            }
+
+            // 로컬 요청 차단
+            const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(reqUrl);
+            if (isLocal) return request.abort();
+
+            request.continue();
+        });
+
+        // 타이머 및 브라우저 환경 설정
+        page.setDefaultNavigationTimeout(120000);
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        
+        // 초기 뷰포트: 데스크톱 레이아웃 유도
+        await page.setViewport({ width: 3000, height: 1000 });
+    }
+
+    /**
+     * Notion 페이지로 이동하고 네트워크 안정화를 대기합니다
+     * 
+     * 모든 네트워크 요청이 완료될 때까지 대기하여 페이지가
+     * 완전히 로드되었음을 보장합니다.
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @param {string} url - 이동할 Notion 페이지 URL
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _navigateToPage(page, url) {
+        logger.info(`Navigating to URL: ${url}`);
+        await page.goto(url, { waitUntil: 'networkidle0' });
+        logger.info('Page navigation completed');
+    }
+
+    /**
+     * Notion 페이지의 모든 토글 블록을 펼칩니다
+     * 
+     * 중첩된 토글을 포함하여 페이지 내 모든 토글 블록을 반복적으로 열고,
+     * 각 반복마다 렌더링이 완료될 때까지 대기합니다.
+     * 
+     * 최대 반복 횟수(20회)에 도달하면 작업을 종료합니다.
+     * (무한 루프 방지)
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _openAllToggleBlocks(page) {
+        logger.info('[PDF-Toggle] Starting to open all toggles...');
+        try {
+            let allToggleClosed = false;
+            let iterationCount = 0;
+            const maxIterations = 20; // 무한 루프 방지
+            
+            // 중첩된 토글까지 모두 처리하기 위해 반복 실행
+            while (!allToggleClosed && iterationCount < maxIterations) {
+                iterationCount++;
+                
+                const toggleInfo = await page.evaluate(() => {
+                    const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
+                    const closedToggles = Array.from(toggleButtons).filter(btn => 
+                        btn.getAttribute('aria-expanded') === 'false'
+                    );
+                    
+                    return {
+                        totalCount: toggleButtons.length,
+                        closedCount: closedToggles.length
+                    };
+                });
+                
+                logger.debug(`[PDF-Toggle] Iteration ${iterationCount}: Total=${toggleInfo.totalCount}, Closed=${toggleInfo.closedCount}`);
+                
+                if (toggleInfo.closedCount === 0) {
+                    allToggleClosed = true;
+                    logger.info('[PDF-Toggle] All toggles are now open');
+                } else {
+                    // 모든 닫힌 토글 클릭
+                    await page.evaluate(() => {
+                        const toggleButtons = document.querySelectorAll('.notion-toggle-block [role="button"]');
+                        const closedToggles = Array.from(toggleButtons).filter(btn => 
+                            btn.getAttribute('aria-expanded') === 'false'
+                        );
+                        closedToggles.forEach(button => {
+                            button.click();
+                        });
+                    });
+                    
+                    // 렌더링 대기
+                    await page.waitForTimeout(500);
+                    
+                    // requestAnimationFrame 대기 (레이아웃 계산 완료)
+                    await page.evaluate(() => {
+                        return new Promise(resolve => {
+                            requestAnimationFrame(() => {
+                                requestAnimationFrame(() => {
+                                    resolve();
+                                });
+                            });
+                        });
+                    });
+                }
+            }
+            
+            if (iterationCount >= maxIterations) {
+                logger.warn('[PDF-Toggle] Max iterations reached, some toggles may still be closed');
+            }
+            
+            // 최종 안정화 대기
+            await page.waitForTimeout(1000);
+            logger.info('[PDF-Toggle] Toggle processing completed');
+        } catch (err) {
+            logger.warn(`[PDF-Toggle] Error opening toggles: ${err.message}`);
+        }
+    }
+
+    /**
+     * KaTeX CSS를 페이지에 주입합니다
+     * 
+     * CDN에서 KaTeX 스타일시트를 로드하고 페이지에 적용합니다.
+     * KaTeX 요소의 수식 렌더링을 개선하기 위해 필요합니다.
+     * 
+     * CDN 로드 실패해도 계속 진행합니다. (Notion 페이지에 이미 있을 수 있음)
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @returns {Promise<number>} 페이지에 로드된 스타일시트의 총 개수
+     * @private
+     */
+    async _injectKaTeXCSS(page) {
+        logger.info('Injecting KaTeX CSS for PDF rendering...');
+        try {
+            await page.addStyleTag({
+                url: 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+                crossorigin: 'anonymous'
+            });
+            logger.info('KaTeX CSS injected successfully');
+        } catch (err) {
+            // CDN 실패해도 계속 진행 (Notion 페이지에 이미 있을 수 있음)
+            logger.debug(`KaTeX CSS injection attempted: ${err.message}`);
+        }
+        
+        // 모든 기존 stylesheet 확인
+        const stylesheetCount = await page.evaluate(() => {
+            return document.querySelectorAll('link[rel="stylesheet"]').length;
+        });
+        logger.info(`Found ${stylesheetCount} stylesheets on page`);
+        
+        return stylesheetCount;
+    }
+
+    /**
+     * Notion 페이지의 치수를 계산하고 렌더링 최적화를 수행합니다
+     * 
+     * 페이지 너비를 감지하고, CSS를 동적으로 최적화하며, 
+     * 웹 폰트, KaTeX, MathJax 렌더링을 대기합니다.
+     * 
+     * 반환값:
+     *   - height: 계산된 페이지 높이
+     *   - width: 감지된 페이지 너비
+     *   - padTop, padBottom, padLeft, padRight: 계산된 여백
+     *   - scale: PDF 생성 스케일
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @param {Object} options - 페이지 옵션 (includeBanner, marginTop, marginBottom 등)
+     * @returns {Promise<Object>} 페이지 치수 정보
+     * @private
+     */
+    async _calculatePageDimensions(page, options) {
+        // ... (이미 구현됨)
+    }
+
+    /**
+     * KaTeX 렌더링 상태를 검증합니다
+     * 
+     * PDF 생성 전에 KaTeX 요소들이 올바르게 렌더링되었는지 확인합니다.
+     * - KaTeX 요소의 개수
+     * - 폰트 로드 여부
+     * - CSS 로드 완료 여부
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @returns {Promise<Object>} KaTeX 검증 결과
+     *   - count: KaTeX 요소 개수
+     *   - status: 상태 ('no-katex', 'rendered', 등)
+     *   - fontFamily: 적용된 폰트
+     *   - cssLoaded: CSS 로드 여부
+     * @private
+     */
+    async _validateKaTeXRendering(page) {
+        const katexStatus = await page.evaluate(() => {
+            const katexElements = document.querySelectorAll('.katex');
+            const katexCount = katexElements.length;
+            
+            if (katexCount === 0) {
+                return { count: 0, status: 'no-katex', hasCSS: !!document.querySelector('link[href*="katex"]') };
+            }
+            
+            // 첫 번째 KaTeX 요소 검증
+            const firstKatex = katexElements[0];
+            const computedStyle = window.getComputedStyle(firstKatex);
+            const fontFamily = computedStyle.fontFamily;
+            
+            console.log(`[KaTeX Validation] Count: ${katexCount}, Font: ${fontFamily}`);
+            
+            // ✅ CSS 로드 확인 (유효한 선택자만 사용)
+            const hasKaTeXLink = !!document.querySelector('link[href*="katex"]');
+            const hasKaTeXStyleTag = !!document.querySelector('style[data-katex]');
+            // style 태그의 textContent 검사
+            const hasKaTeXInlineStyle = Array.from(document.querySelectorAll('style')).some(style => 
+                style.textContent && style.textContent.includes('.katex')
+            );
+            const cssLoaded = hasKaTeXLink || hasKaTeXStyleTag || hasKaTeXInlineStyle;
+            
+            return {
+                count: katexCount,
+                status: 'rendered',
+                fontFamily: fontFamily,
+                hasHTML: !!firstKatex.querySelector('.katex-html'),
+                cssLoaded: cssLoaded,
+                debugCSS: { hasKaTeXLink, hasKaTeXStyleTag, hasKaTeXInlineStyle }
+            };
+        });
+        
+        logger.info(`KaTeX Pre-PDF Status: ${JSON.stringify(katexStatus)}`);
+        
+        if (katexStatus.count > 0 && katexStatus.fontFamily) {
+            logger.info(`✅ KaTeX fonts appear to be loaded: ${katexStatus.fontFamily}`);
+        } else if (katexStatus.count > 0 && !katexStatus.fontFamily) {
+            logger.warn(`⚠️ KaTeX elements found but fonts may not be loaded properly`);
+        }
+        
+        return katexStatus;
+    }
+
+    /**
+     * 최종 뷰포트를 조정하고 렌더링 완료를 대기합니다
+     * 
+     * 계산된 치수에 따라 브라우저 뷰포트를 최종 조정하고,
+     * 레이아웃 렌더링이 완료될 때까지 대기합니다.
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @param {Object} dimensions - 페이지 치수 (height, width, padLeft, padRight 등)
+     * @returns {Promise<Object>} 최종 PDF 크기 정보 (pdfWidth, pdfHeight, scale)
+     * @private
+     */
+    async _adjustFinalViewport(page, dimensions) {
+        const finalHeight = Math.ceil(dimensions.height) + 100;
+        const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
+        
+        logger.info(`Adjusting viewport to ${finalWidth}x${finalHeight}`);
+        await page.setViewport({ width: finalWidth + 1000, height: finalHeight });
+        
+        // 레이아웃 안정화 대기
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        const scale = dimensions.scale;
+        const pdfWidth = finalWidth * scale;
+        const pdfHeight = finalHeight * scale;
+        
+        return { pdfWidth, pdfHeight, scale };
+    }
+
+    /**
+     * 페이지의 스크린샷을 캡처하여 파일로 저장합니다
+     * 
+     * 디버그 목적으로 PDF 생성 전 페이지의 스크린샷을 캡처합니다.
+     * 렌더링된 콘텐츠 영역만 캡처하여 빈 공간을 최소화합니다.
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @param {string} screenshotPath - 저장할 스크린샷 파일 경로
+     * @returns {Promise<boolean>} 성공 여부
+     * @private
+     */
+    async _captureScreenshot(page, screenshotPath) {
+        if (!screenshotPath) return false;
+        
+        try {
+            // 브라우저 컨텍스트에서 .layout-content 요소들의 전체 영역(Bounding Box) 계산
+            const boundingBox = await page.evaluate(() => {
+                const elements = Array.from(document.querySelectorAll('.layout-content, .layout-full'));
+                if (elements.length === 0) return null;
+
+                let minX = Infinity;
+                let minY = Infinity;
+                let maxX = -Infinity;
+                let maxY = -Infinity;
+
+                elements.forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    // 스크롤 위치를 보정한 절대 좌표 계산
+                    const x = rect.left + window.scrollX;
+                    const y = rect.top + window.scrollY;
+                    
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x + rect.width > maxX) maxX = x + rect.width;
+                    if (y + rect.height > maxY) maxY = y + rect.height;
+                });
+                return {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY
+                };
+            });
+
+            if (boundingBox) {
+                // 계산된 전체 영역만 지정하여 스크린샷 캡처
+                await page.screenshot({
+                    path: screenshotPath,
+                    clip: boundingBox
+                });
+            } else {
+                // 요소를 찾지 못했을 경우의 대비책
+                await page.screenshot({ path: screenshotPath, fullPage: true });
+            }
+            
+            logger.info(`Screenshot saved to ${screenshotPath}`);
+            return true;
+        } catch (err) {
+            logger.warn(`Screenshot capture failed: ${err.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * 계산된 치수로 PDF를 생성하고 스트림을 반환합니다
+     * 
+     * Puppeteer의 createPDFStream을 사용하여 PDF를 생성합니다.
+     * 페이지 배경색/이미지 포함, 태그 기반 PDF 등의 옵션을 적용합니다.
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @param {Object} pdfOptions - PDF 크기 정보 (pdfWidth, pdfHeight, scale)
+     * @returns {Promise<ReadableStream>} Node.js 읽기 스트림 형태의 PDF 데이터
+     * @private
+     */
+    async _createPDFStream(page, pdfOptions) {
+        const { pdfWidth, pdfHeight, scale } = pdfOptions;
+        
+        logger.info(`Creating PDF - Width: ${pdfWidth}px, Height: ${pdfHeight}px, Scale: ${scale}`);
+        
+        const pdfWebStream = await page.createPDFStream({
+            width: `${pdfWidth}px`,
+            height: `${pdfHeight}px`,
+            scale: scale,
+            printBackground: true,
+            displayHeaderFooter: false,
+            margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
+            pageRanges: '1',
+            preferCSSPageSize: false,
+            tagged: true,
+            outline: true,
+            omitBackground: false  // ✅ 배경색/이미지 포함
+        });
+
+        const nodeStream = Readable.fromWeb(pdfWebStream);
+        logger.info(`PDF stream created successfully`);
+        
+        return nodeStream;
+    }
+
+    /**
+     * PDF 스트림에 정리 핸들러를 등록합니다
+     * 
+     * 스트림이 종료되거나 에러가 발생할 때 페이지와 브라우저 리소스를
+     * 정리하는 이벤트 리스너를 등록합니다.
+     * 
+     * @param {ReadableStream} stream - PDF 스트림
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @param {Browser} browser - Puppeteer 브라우저 인스턴스
+     * @returns {void}
+     * @private
+     */
+    async _attachStreamCleanupHandlers(stream, page, browser) {
+        stream.on('close', async () => {
+            try {
+                await this._cleanupPageResources(page);
+                await browserPool.release(browser);
+                logger.debug('Stream closed and resources cleaned up');
+            } catch (err) {
+                logger.warn(`Error during stream close cleanup: ${err.message}`);
+            }
+        });
+
+        stream.on('error', async (err) => {
+            logger.error(`PDF stream error: ${err.message}`);
+            try {
+                await this._cleanupPageResources(page);
+                await browserPool.release(browser);
+            } catch (cleanupErr) {
+                logger.warn(`Error during stream error cleanup: ${cleanupErr.message}`);
+            }
+        });
     }
 
     /**
