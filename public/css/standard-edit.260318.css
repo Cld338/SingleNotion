@@ -23,52 +23,79 @@
 }
 
 /* =========================================================
-   Scrollbar Reset (Override Notion CSS)
+   Scrollbar Styling (Enhanced Visibility & UX)
    ========================================================= */
 /* Prevent Notion CSS from modifying our scrollbars */
 html, body, * {
-    scrollbar-color: #cbd5e1 transparent !important;
-    scrollbar-width: auto !important;
+    scrollbar-color: #64748b #f1f5f9 !important;
+    scrollbar-width: thin !important;
 }
 
 ::-webkit-scrollbar {
-    width: 12px !important;
-    height: 12px !important;
+    width: 14px !important;
+    height: 14px !important;
 }
 
 ::-webkit-scrollbar-track {
-    background: transparent !important;
+    background: #f1f5f9 !important;
+    border-radius: 8px !important;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #cbd5e1 !important;
-    border-radius: 4px !important;
+    background: linear-gradient(to bottom, #64748b, #475569) !important;
+    border-radius: 8px !important;
+    border: 2px solid #f1f5f9 !important;
+    transition: background 0.2s ease !important;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8 !important;
+    background: linear-gradient(to bottom, #475569, #334155) !important;
+    box-shadow: 0 0 8px rgba(100, 116, 139, 0.3) !important;
+}
+
+::-webkit-scrollbar-thumb:active {
+    background: #334155 !important;
 }
 
 ::-webkit-scrollbar-corner {
-    background: transparent !important;
+    background: #f1f5f9 !important;
 }
 
-/* Specific element scrollbar resets */
+/* Specific element scrollbar styling */
 #notion-viewer::-webkit-scrollbar,
-.sidebar::-webkit-scrollbar {
-    width: 12px !important;
-    height: 12px !important;
+.sidebar::-webkit-scrollbar,
+.sidebar-scroll-area::-webkit-scrollbar {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+#notion-viewer::-webkit-scrollbar-track,
+.sidebar::-webkit-scrollbar-track,
+.sidebar-scroll-area::-webkit-scrollbar-track {
+    background: #f1f5f9 !important;
+    border-radius: 8px !important;
 }
 
 #notion-viewer::-webkit-scrollbar-thumb,
-.sidebar::-webkit-scrollbar-thumb {
-    background: #cbd5e1 !important;
-    border-radius: 4px !important;
+.sidebar::-webkit-scrollbar-thumb,
+.sidebar-scroll-area::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom, #64748b, #475569) !important;
+    border-radius: 8px !important;
+    border: 2px solid #f1f5f9 !important;
+    transition: background 0.2s ease !important;
 }
 
 #notion-viewer::-webkit-scrollbar-thumb:hover,
-.sidebar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8 !important;
+.sidebar::-webkit-scrollbar-thumb:hover,
+.sidebar-scroll-area::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(to bottom, #475569, #334155) !important;
+    box-shadow: 0 0 8px rgba(100, 116, 139, 0.3) !important;
+}
+
+#notion-viewer::-webkit-scrollbar-thumb:active,
+.sidebar::-webkit-scrollbar-thumb:active,
+.sidebar-scroll-area::-webkit-scrollbar-thumb:active {
+    background: #334155 !important;
 }
 
 /* KaTeX Fonts Load */

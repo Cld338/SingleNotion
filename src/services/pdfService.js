@@ -1232,7 +1232,7 @@ class PdfService {
 
             // A. 너비 자동 감지
             const contentEl = document.querySelector('.notion-page-content');
-            const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 100 : 1080;
+            const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 200: 1080;
 
             // ✅ FIX: 너비를 축소하지 않도록 scale 계산 개선
             // pageWidth가 지정되었을 때, 감지된 너비보다 작으면 무시하고 감지된 너비 사용
