@@ -22,6 +22,13 @@ services:
     depends_on:
       - redis
     command: ["node", "src/app.js"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 30s
 
 
   # 2. Worker 전용 컨테이너
@@ -40,21 +47,9 @@ services:
     depends_on:
       - redis
     command: ["node", "src/worker.js"]
+    stop_grace_period: 30s
 
-  # 3. VitePress 문서 사이트 컨테이너 추가
-  docs-site:
-    build: .
-    container_name: my-pdf-docs
-    restart: always
-    ports:
-      - "5173:5173"
-    volumes:
-      - .:/usr/src  # 실시간 문서 수정을 위해 소스 코드 볼륨 마운트
-    networks:
-      - cld-net
-    command: ["npm", "run", "docs:dev"]
-
-  # 4. Redis
+  # 3 4. Redis
   redis:
     image: redis:alpine
     container_name: my-pdf-redis

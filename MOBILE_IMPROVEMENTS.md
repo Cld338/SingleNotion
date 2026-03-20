@@ -62,14 +62,14 @@ Notion PDF Converter 프로젝트를 모바일에서 사용할 수 있도록 완
 ### 새로운 파일
 | 파일 | 목적 |
 |-----|------|
-| `public/css/mobile.260313.css` | 모든 모바일 반응형 스타일 |
+| `public/css/mobile.260318.css` | 모든 모바일 반응형 스타일 |
 
 ### 수정된 파일
 
 #### 1. `public/views/standard-edit.ejs`
 ```html
 <!-- 모바일 CSS 추가 -->
-<link rel="stylesheet" href="/css/mobile.260313.css">
+<link rel="stylesheet" href="/css/mobile.260318.css">
 
 <!-- 햄버거 버튼 추가 -->
 <button class="sidebar-toggle-btn" id="sidebar-toggle">

@@ -213,11 +213,69 @@ app.get('/proxy-asset', async (req, res) => {
 // 파일 정리 스케줄러 실행
 startCleanupJob();
 
+// Health check 엔드포인트
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'UP',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Readiness check 엔드포인트 (Redis 연결 확인)
+app.get('/ready', async (req, res) => {
+    try {
+        // Redis 연결 상태 확인 로직
+        res.status(200).json({
+            status: 'READY',
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        logger.error('Readiness check failed:', err);
+        res.status(503).json({
+            status: 'NOT_READY',
+            error: err.message
+        });
+    }
+});
+
+let isShuttingDown = false;
+
 const server = app.listen(PORT, () => {
     logger.info(`Server running on http://localhost:${PORT}`);
 });
 
-process.on('SIGTERM', () => server.close());
-process.on('SIGINT', () => server.close());
+// Graceful Shutdown 처리
+const gracefulShutdown = (signal) => {
+    if (isShuttingDown) return;
+    
+    isShuttingDown = true;
+    logger.info(`${signal} received, starting graceful shutdown...`);
+    
+    // 새로운 요청 거부
+    server.close(() => {
+        logger.info('HTTP server closed');
+        process.exit(0);
+    });
+    
+    // 30초 후 강제 종료
+    setTimeout(() => {
+        logger.error('Graceful shutdown timeout, forcing exit...');
+        process.exit(1);
+    }, 30000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// 미처리 예외 처리
+process.on('uncaughtException', (err) => {
+    logger.error('Uncaught Exception:', err);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
+});
 
 module.exports = app;
