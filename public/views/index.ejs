@@ -83,12 +83,13 @@
                 <form id="convertForm" class="url-input-wrapper">
                     <div class="input-inner">
                         <i class="fa-solid fa-link input-icon" aria-hidden="true"></i>
-                        <input type="url" id="url" name="url" placeholder="노션 페이지 링크" required aria-label="PDF로 변환할 노션 페이지의 URL을 입력하세요">
+                        <input type="text" id="url" name="url" placeholder="노션 페이지 링크" required aria-label="PDF로 변환할 노션 페이지의 URL을 입력하세요">
                         <button type="submit" id="submitBtn" class="submit-btn" aria-label="입력한 URL로 PDF 변환 시작하기">
                             변환하기 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                         </button>
                     </div>
                 </form>
+                <div id="error-message" class="error-message" role="alert"></div>
                 <p class="helper-text"><i class="fa-solid fa-circle-info"></i> 우측 상단 '공유'에서 <strong>게시(웹에서 게시)</strong> 또는 <strong>링크가 있는 모든 사용자</strong> 상태여야 합니다.</p>
             </div>
         </section>
@@ -132,17 +133,66 @@
             backDelay: 2000
         });
 
+        const urlInput = document.getElementById('url');
+        const errorMessage = document.getElementById('error-message');
+        let errorTimeoutId = null; // 에러 자동 복구 타이머
+
+        // 입력 필드에 입력되면 에러 상태 제거
+        urlInput.addEventListener('input', function() {
+            if (errorTimeoutId) clearTimeout(errorTimeoutId);
+            document.getElementById('convertForm').classList.remove('error');
+            errorMessage.classList.remove('show');
+            errorMessage.textContent = '';
+        });
+
         document.getElementById('convertForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            
+            const form = this;
+            // 기존 에러 상태 제거
+            form.classList.remove('error');
+            errorMessage.classList.remove('show');
+            errorMessage.textContent = '';
             
             const formData = new FormData(this);
             let rawUrl = formData.get('url').trim();
 
+            // URL 필드가 비어있는지 확인
+            if (!rawUrl) {
+                errorMessage.textContent = '노션 페이지 링크를 입력해 주세요.';
+                errorMessage.classList.add('show');
+                form.classList.add('error');
+                
+                // 1초 후 자동으로 에러 상태 복구
+                if (errorTimeoutId) clearTimeout(errorTimeoutId);
+                errorTimeoutId = setTimeout(() => {
+                    form.classList.remove('error');
+                    errorMessage.classList.remove('show');
+                }, 1000);
+                return;
+            }
+
             try {
                 const urlObj = new URL(rawUrl);
+                
+                // 노션 URL 확인 (notion.so 또는 notion.site 도메인만 허용)
+                if (!urlObj.hostname.endsWith('.notion.so') && !urlObj.hostname.endsWith('.notion.site')) {
+                    throw new Error('허용되지 않는 도메인입니다');
+                }
+                
                 rawUrl = `${urlObj.origin}${urlObj.pathname}`;
             } catch (e) {
-                alert('올바른 URL 형식이 아닙니다.');
+                // 인라인 에러 메시지 표시
+                errorMessage.textContent = '유효한 노션 URL을 입력해 주세요.';
+                errorMessage.classList.add('show');
+                form.classList.add('error');
+
+                // 1초 후 자동으로 에러 상태 복구
+                if (errorTimeoutId) clearTimeout(errorTimeoutId);
+                errorTimeoutId = setTimeout(() => {
+                    form.classList.remove('error');
+                    errorMessage.classList.remove('show');
+                }, 1000);
                 return;
             }
 
@@ -151,7 +201,7 @@
             });
 
             // standard-edit.html -> standard-edit 으로 변경
-            window.location.href = `standard-edit?${params.toString()}`;
+            window.location.href = `/standard-edit?${params.toString()}`;
         });
     </script>
 </body>

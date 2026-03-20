@@ -11,6 +11,19 @@ const crypto = require('crypto');
 
 const router = express.Router();
 
+// 노션 URL 도메인 검증 함수
+const validateNotionDomain = (url) => {
+    try {
+        const urlObj = new URL(url);
+        if (!urlObj.hostname.endsWith('.notion.so') && !urlObj.hostname.endsWith('.notion.site')) {
+            return { valid: false, error: '허용되지 않는 도메인입니다. notion.so 또는 notion.site 도메인만 사용 가능합니다.' };
+        }
+        return { valid: true };
+    } catch (err) {
+        return { valid: false, error: '유효하지 않은 URL 형식입니다.' };
+    }
+};
+
 const convertLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
@@ -64,12 +77,11 @@ router.get('/preview-html', async (req, res) => {
             return res.status(400).json({ error: 'url 파라미터가 필요합니다.' });
         }
 
-        // URL 유효성 검사
-        try {
-            new URL(url);
-        } catch (err) {
+        // URL 유효성 및 도메인 검사
+        const validation = validateNotionDomain(url);
+        if (!validation.valid) {
             logger.warn(`Invalid URL provided: ${url}`);
-            return res.status(400).json({ error: '유효하지 않은 URL입니다.' });
+            return res.status(400).json({ error: validation.error });
         }
 
         // --- [추가된 부분] 옵션 파라미터 파싱 ---
@@ -126,6 +138,13 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
 
         const { error, value } = convertSchema.validate(rawBody);
         if (error) return res.status(400).json({ error: error.details[0].message });
+
+        // 노션 도메인 추가 검증
+        const domainValidation = validateNotionDomain(value.url);
+        if (!domainValidation.valid) {
+            logger.warn(`Invalid Notion domain: ${value.url}`);
+            return res.status(400).json({ error: domainValidation.error });
+        }
 
         const job = await pdfQueue.add('convert', {
             targetUrl: value.url,
