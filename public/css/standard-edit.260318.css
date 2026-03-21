@@ -198,6 +198,24 @@ body {
     /* overflow-x: auto !important; */
 }
 
+/* Code Block Styling - 줄바꿈 및 공백 유지 */
+#content-area .notion-code-block {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+#content-area .notion-code-block span {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+}
+
+/* Monospace Font for Code Blocks */
+#content-area .notion-code-block,
+#content-area .notion-code-block span {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+}
+
 /* =========================================================
    A4 Page Break Markers & Blocks
    ========================================================= */

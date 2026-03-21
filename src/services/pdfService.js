@@ -989,6 +989,9 @@ class PdfService {
             // ✅ KaTeX CSS 주입
             await this._injectKaTeXCSS(page);
 
+            // ✅ 기본 PDF 렌더링 CSS 주입 (코드 블록 줄바꿈 등)
+            await this._injectPDFRenderingCSS(page);
+
             // ✅ [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
             const dimensions = await this._calculatePageDimensions(page, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
 
@@ -1208,6 +1211,43 @@ class PdfService {
     }
 
     /**
+     * PDF 렌더링에 필요한 기본 CSS를 페이지에 주입합니다
+     * 
+     * 다음 CSS 템플릿들을 페이지의 <head>에 주입합니다:
+     *   - BASE_LAYOUT_CSS: UI 요소 제거, 레이아웃 정리
+     *   - CODE_BLOCK_CSS: 코드 블록의 줄바꿈 (white-space: pre-wrap)
+     *   - KATEX_RENDERING_CSS: 수식 렌더링
+     * 
+     * 이 CSS들은 동적 레이아웃 CSS가 적용되기 전에 먼저 로드되어야 합니다.
+     * 
+     * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _injectPDFRenderingCSS(page) {
+        logger.info('Injecting PDF rendering CSS templates (BASE_LAYOUT, CODE_BLOCK, KATEX)...');
+        
+        try {
+            // 기본 CSS 템플릿들을 결합
+            const baseCSS = CSSTemplates.BASE_LAYOUT_CSS;
+            const codeBlockCSS = CSSTemplates.CODE_BLOCK_CSS;
+            const katexCSS = CSSTemplates.KATEX_RENDERING_CSS;
+            
+            const combinedCSS = `${baseCSS}\n${codeBlockCSS}\n${katexCSS}`;
+            
+            // <style> 태그로 페이지에 주입
+            await page.addStyleTag({
+                content: combinedCSS
+            });
+            
+            logger.info('✅ PDF rendering CSS injected successfully (BASE_LAYOUT + CODE_BLOCK + KATEX)');
+        } catch (err) {
+            logger.error(`Failed to inject PDF rendering CSS: ${err.message}`);
+            throw err;
+        }
+    }
+
+    /**
      * Notion 페이지의 치수를 계산하고 렌더링 최적화를 수행합니다
      * 
      * 페이지 너비를 감지하고, CSS를 동적으로 최적화하며, 
@@ -1394,6 +1434,14 @@ class PdfService {
             const padTopIdx = includeBanner ? 3 : (includeTags ? 4 : 5);
             const totalLayoutWidth = detectedWidth + padLeft + padRight;
             
+            // padding-top CSS 추가
+            if (padTop > 0) {
+                freezeCSS += `
+                    .layout > .layout-content:nth-child(${padTopIdx}) {
+                        padding-top: ${padTop}px !important;
+                    }\n`;
+            }
+            
             const styleTag = document.createElement('style');
             styleTag.id = 'sn-pdf-freeze-style';
             styleTag.innerHTML = freezeCSS;
@@ -1440,6 +1488,10 @@ class PdfService {
             }
 
             if (contentHeight < document.body.scrollHeight) contentHeight = document.body.scrollHeight;
+            
+            // padding 정보를 window 객체에 저장 (_reapplyFreezeCSS에서 사용)
+            window._snPdfPadTop = padTop;
+            window._snPdfPadTopIdx = padTopIdx;
             
             return {
                 height: Math.ceil(contentHeight),
@@ -1597,6 +1649,17 @@ class PdfService {
                         ${(el.classList.contains('notion-image-block') || el.classList.contains('notion-asset-wrapper')) ? `height: ${rect.height}px !important;` : ''}
                     }\n`;
             });
+
+            // padding-top CSS 추가
+            // 저장된 padTop 값이 있으면 추가 (데이터 속성 사용)
+            const savedPadTop = window._snPdfPadTop;
+            const savedPadTopIdx = window._snPdfPadTopIdx;
+            if (savedPadTop > 0 && savedPadTopIdx) {
+                newFreezeCSS += `
+                    .layout > .layout-content:nth-child(${savedPadTopIdx}) {
+                        padding-top: ${savedPadTop}px !important;
+                    }\n`;
+            }
 
             // 새로운 style 태그 생성 및 적용
             const newStyleTag = document.createElement('style');
