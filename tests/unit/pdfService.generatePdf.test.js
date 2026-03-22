@@ -84,6 +84,7 @@ describe('PdfService - generatePdf()', () => {
         pdfService._navigateToPage = jest.fn().mockResolvedValue(undefined);
         pdfService._openAllToggleBlocks = jest.fn().mockResolvedValue(undefined);
         pdfService._injectKaTeXCSS = jest.fn().mockResolvedValue(undefined);
+        pdfService._injectPDFRenderingCSS = jest.fn().mockResolvedValue(undefined);
         pdfService._calculatePageDimensions = jest.fn()
             .mockResolvedValue(overrides.dimensions || defaultDimensions);
         pdfService._validateKaTeXRendering = jest.fn().mockResolvedValue(undefined);
