@@ -86,10 +86,16 @@ class PdfService {
      * @private
      */
     async _setupPageForPreview(page, url) {
-        // 보안 패치 로직
+        // 보안 패치 + 성능 최적화: 요청 필터링
         await page.setRequestInterception(true);
+        
+        // 차단할 리소스 타입 (초기 로드 시에만)
+        const blockedResourceTypes = new Set(['image', 'media', 'font']);
+        const blockedUrls = ['doubleclick', 'analytics', 'google-analytics', 'facebook', 'twitter', 'ads', 'tracking'];
+        
         page.on('request', request => {
             const reqUrl = request.url().split('?')[0];
+            const resourceType = request.resourceType();
             const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
 
             if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://') && !reqUrl.startsWith('data:')) {
@@ -100,8 +106,20 @@ class PdfService {
                 const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(reqUrl);
                 if (!isNotionDomain) return request.abort();
             }
+            
             const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(reqUrl);
             if (isLocal) return request.abort();
+
+            // ⚡ 성능 최적화: 초기 로드 시 불필요한 리소스 차단
+            if (blockedResourceTypes.has(resourceType)) {
+                logger.debug(`[Performance] Blocking ${resourceType}: ${reqUrl.substring(0, 80)}`);
+                return request.abort();
+            }
+
+            if (blockedUrls.some(blocked => reqUrl.includes(blocked))) {
+                logger.debug(`[Performance] Blocking tracking: ${reqUrl.substring(0, 80)}`);
+                return request.abort();
+            }
 
             request.continue();
         });
@@ -168,10 +186,14 @@ class PdfService {
     async _waitForResourcesLoad(page) {
         logger.info('Waiting for CSS and JS to load completely...');
         
-        await page.evaluate(async () => {
+        const timings = await page.evaluate(async () => {
+            const timings = {};
+            let stageStart = Date.now();
+            
+            // Stage 1: 페이지 스크롤
             await new Promise((resolve) => {
                 let totalHeight = 0;
-                const distance = 100;
+                const distance = 500;
                 const timer = setInterval(() => {
                     const scrollHeight = document.body.scrollHeight;
                     window.scrollBy(0, distance);
@@ -181,9 +203,13 @@ class PdfService {
                         window.scrollTo(0, 0);
                         resolve();
                     }
-                }, 50);
+                }, 1);
             });
-            // 1. 모든 스타일시트 로드 완료 확인
+            timings.scroll = Date.now() - stageStart;
+            console.log(`[Timing] Scroll completed: ${timings.scroll}ms`);
+            
+            // Stage 2: 모든 스타일시트 로드 완료 확인 (전체 10초 타임아웃)
+            stageStart = Date.now();
             const stylesheets = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
             const styleloadPromises = stylesheets.map(link => {
                 return new Promise((resolve) => {
@@ -194,23 +220,29 @@ class PdfService {
                         // 로드 완료 대기
                         link.onload = () => resolve();
                         link.onerror = () => resolve(); // 에러나도 계속
-                        
-                        // 타임아웃 (30초)
-                        setTimeout(resolve, 30000);
                     }
                 });
             });
             
             if (styleloadPromises.length > 0) {
-                await Promise.all(styleloadPromises);
+                await Promise.race([
+                    Promise.all(styleloadPromises),
+                    new Promise(resolve => setTimeout(resolve, 10000))
+                ]);
             }
+            timings.stylesheets = Date.now() - stageStart;
+            console.log(`[Timing] Stylesheets loaded: ${timings.stylesheets}ms (${stylesheets.length} files)`);
             
-            // 2. 웹 폰트 로딩 대기
+            // Stage 3: 웹 폰트 로딩 대기
+            stageStart = Date.now();
             if (document.fonts && document.fonts.ready) {
                 await document.fonts.ready;
             }
+            timings.fonts = Date.now() - stageStart;
+            console.log(`[Timing] Web fonts ready: ${timings.fonts}ms`);
             
-            // 3. 리플로우 완료 대기 (레이아웃 계산)
+            // Stage 4: 리플로우 완료 대기 (레이아웃 계산)
+            stageStart = Date.now();
             await new Promise(resolve => {
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
@@ -218,8 +250,11 @@ class PdfService {
                     });
                 });
             });
+            timings.reflow = Date.now() - stageStart;
+            console.log(`[Timing] Reflow completed: ${timings.reflow}ms`);
             
-            // 4. ✅ KaTeX/MathJax 렌더링 완료 대기
+            // Stage 5: ✅ KaTeX/MathJax 렌더링 완료 대기
+            stageStart = Date.now();
             try {
                 const hasKaTeX = document.querySelectorAll('.katex').length > 0;
                 if (hasKaTeX) {
@@ -268,9 +303,13 @@ class PdfService {
             } catch (err) {
                 console.warn(`Preview KaTeX/MathJax check failed: ${err.message}`);
             }
+            timings.katexMathJax = Date.now() - stageStart;
+            console.log(`[Timing] KaTeX/MathJax rendered: ${timings.katexMathJax}ms`);
             
-            // 5. ✅ 노션 토글 블록 모두 열기 및 렌더링 대기
+            // Stage 6: ✅ 노션 토글 블록 모두 열기 및 렌더링 대기
+            stageStart = Date.now();
             console.log('[Preview-Toggle] Starting to open all toggles...');
+            let toggleIterations = 0;
             try {
                 let allToggleClosed = false;
                 let iterationCount = 0;
@@ -311,22 +350,82 @@ class PdfService {
                     }
                 }
                 
+                toggleIterations = iterationCount;
                 if (iterationCount >= maxIterations) {
                     console.warn('[Preview-Toggle] Max iterations reached, some toggles may still be closed');
                 }
                 
-                // 최종 안정화 대기
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // 최종 안정화 대기 (토글이 있었을 때만)
+                if (toggleIterations > 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
                 console.log('[Preview-Toggle] Toggle processing completed');
             } catch (err) {
                 console.warn(`[Preview-Toggle] Error opening toggles: ${err.message}`);
             }
+            timings.toggles = Date.now() - stageStart;
+            console.log(`[Timing] Toggles processed: ${timings.toggles}ms (${toggleIterations} iterations)`);
             
-            // 6. 추가 지연 (CSS 애니메이션 + 렌더링 완료)
+            // Stage 6.5: ✅ 코드 블록 문법 하이라이팅 완료 대기 (Highlight.js 렌더링)
+            stageStart = Date.now();
+            try {
+                const hasCodeBlocks = document.querySelectorAll('pre, code').length > 0;
+                if (hasCodeBlocks) {
+                    console.log(`[Preview-CodeBlock] Found ${document.querySelectorAll('pre').length} code blocks, waiting for syntax highlighting...`);
+                    
+                    // Highlight.js가 로드되고 실행될 때까지 대기
+                    await new Promise((resolve) => {
+                        let checkCount = 0;
+                        const maxChecks = 10; // 최대 5초 (500ms * 10)
+                        
+                        const checkCodeHighlight = () => {
+                            checkCount++;
+                            const codeBlocks = document.querySelectorAll('pre code');
+                            const highlightedBlocks = Array.from(codeBlocks).filter(block => {
+                                // hljs-* 클래스나 span 요소가 있는지 확인
+                                return block.querySelector('span[class*="hljs"]') !== null || 
+                                       block.innerHTML.includes('span class=');
+                            });
+                            
+                            console.log(`[Preview-CodeBlock] Check ${checkCount}: ${highlightedBlocks.length}/${codeBlocks.length} highlighted`);
+                            
+                            if (checkCount >= maxChecks || highlightedBlocks.length === codeBlocks.length) {
+                                console.log(`[Preview-CodeBlock] Syntax highlighting complete`);
+                                resolve();
+                            } else {
+                                setTimeout(checkCodeHighlight, 500);
+                            }
+                        };
+                        
+                        checkCodeHighlight();
+                    });
+                }
+            } catch (err) {
+                console.warn(`[Preview-CodeBlock] Error waiting for code highlight: ${err.message}`);
+            }
+            timings.codeHighlight = Date.now() - stageStart;
+            console.log(`[Timing] Code blocks highlighted: ${timings.codeHighlight}ms`);
+            
+            // Stage 7: 추가 지연 (CSS 애니메이션 + 렌더링 완료)
+            stageStart = Date.now();
             await new Promise(resolve => setTimeout(resolve, 2000));
+            timings.finalAnimation = Date.now() - stageStart;
+            console.log(`[Timing] Final animation delay: ${timings.finalAnimation}ms`);
+            
+            timings.total = Object.values(timings).reduce((a, b) => a + b, 0);
+            return timings;
         });
 
-        logger.info('CSS and JS loading completed');
+        logger.info('[Performance Summary] Resource loading stages:');
+        logger.info(`  - Page scroll: ${timings.scroll}ms`);
+        logger.info(`  - Stylesheets: ${timings.stylesheets}ms`);
+        logger.info(`  - Web fonts: ${timings.fonts}ms`);
+        logger.info(`  - Reflow: ${timings.reflow}ms`);
+        logger.info(`  - KaTeX/MathJax: ${timings.katexMathJax}ms`);
+        logger.info(`  - Toggles: ${timings.toggles}ms`);
+        logger.info(`  - Code block highlighting: ${timings.codeHighlight}ms`);
+        logger.info(`  - Final animation: ${timings.finalAnimation}ms`);
+        logger.info(`  - TOTAL: ${timings.total}ms`);
     }
 
     /**
@@ -889,31 +988,95 @@ class PdfService {
     async getPreviewData(url, options={}) {
         const browser = await browserPool.acquire();
         let page = null;
+        const timings = {}; // 각 단계별 실행 시간 기록
+        let totalStart = Date.now();
 
         try {
             page = await browser.newPage();
 
             // 페이지 초기화 및 보안 설정
+            let stageStart = Date.now();
             await this._setupPageForPreview(page, url);
+            timings.setupPageForPreview = Date.now() - stageStart;
+            logger.info(`[Timing] Setup page for preview: ${timings.setupPageForPreview}ms`);
 
-            // 페이지 로드 및 콘텐츠 대기
-            await page.goto(url, { waitUntil: 'networkidle2' });
+            // 페이지 로드 및 콘텐츠 대기 (⚡ 성능 최적화 + 안정성)
+            stageStart = Date.now();
+            const initialGotoStart = Date.now();
+            // 단계 1: 초기 HTML/CSS/JS 로드 (빠름)
+            await page.goto(url, { waitUntil: 'domcontentloaded' });
+            logger.info(`[Timing] Goto page (initial, images/fonts blocked): ${Date.now() - initialGotoStart}ms`);
+            
+            // 단계 2: 요청 핸들러 변경 - 모든 리소스 로드 허용
+            try {
+                page.removeAllListeners('request');
+                page.on('request', request => {
+                    request.continue().catch(err => {
+                        logger.debug(`[Performance] Request continue failed: ${err.message}`);
+                    });
+                });
+                logger.debug('[Performance] Request handler updated to allow all resources');
+            } catch (err) {
+                logger.warn(`[Performance] Error updating request handler: ${err.message}`);
+            }
+            
+            // 단계 3: 리소스 로드 시간 확보 (더 충분한 시간 제공)
+            // - 이미지 로드
+            // - 웹 폰트 로드
+            // - 동적 콘텐츠 렌더링
+            // - 코드 블록 문법 하이라이팅
+            const resourceLoadStart = Date.now();
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            logger.info(`[Timing] Wait for background resources (images/fonts/syntax highlight): ${Date.now() - resourceLoadStart}ms`);
+            
+            timings.gotoPage = Date.now() - stageStart;
+            logger.info(`[Timing] Goto page (total): ${timings.gotoPage}ms`);
 
             // CSS와 JS 로딩이 완료될 때까지 대기
+            stageStart = Date.now();
             await this._waitForResourcesLoad(page);
+            timings.waitForResourcesLoad = Date.now() - stageStart;
+            logger.info(`[Timing] Wait for resources load: ${timings.waitForResourcesLoad}ms`);
 
             // 콘텐츠 너비, HTML 및 필요한 리소스 추출
+            stageStart = Date.now();
             const result = await this._collectPreviewDataFromPage(page, options);
+            timings.collectPreviewData = Date.now() - stageStart;
+            logger.info(`[Timing] Collect preview data: ${timings.collectPreviewData}ms`);
 
             // 리소스 경로 변환
+            stageStart = Date.now();
             this._convertCollectedResourcePaths(result, url);
+            timings.convertResourcePaths = Date.now() - stageStart;
+            logger.info(`[Timing] Convert resource paths: ${timings.convertResourcePaths}ms`);
 
             // 상세 로깅
             this._logPreviewDataDetails(result);
 
+            // 전체 타이밍 로그
+            timings.total = Date.now() - totalStart;
+            logger.info('[Preview Data Timings Summary]');
+            logger.info(`  - Setup page for preview: ${timings.setupPageForPreview}ms`);
+            logger.info(`  - Goto page: ${timings.gotoPage}ms`);
+            logger.info(`  - Wait for resources load: ${timings.waitForResourcesLoad}ms`);
+            logger.info(`  - Collect preview data: ${timings.collectPreviewData}ms`);
+            logger.info(`  - Convert resource paths: ${timings.convertResourcePaths}ms`);
+            logger.info(`  - TOTAL: ${timings.total}ms`);
+
             logger.info(`Preview data collected - Width: ${result.detectedWidth}, Resources - CSS: ${result.resources.cssLinks.length}, Images: ${result.resources.images.length}, Icons: ${result.resources.icons.length}, Fonts: ${result.resources.fonts.length}, Scripts: ${result.resources.scripts.length}, KaTeX: ${result.resources.katexResources.length}, Videos: ${result.resources.videos.length}`);
 
             return result;
+        } catch (err) {
+            // 에러 발생 시에도 지금까지의 진행 상황 로그
+            const elapsedTotal = Date.now() - totalStart;
+            logger.error(`Preview data collection failed after ${elapsedTotal}ms: ${err.message}`);
+            logger.warn('[Preview Data Collection Progress on Error]');
+            Object.entries(timings).forEach(([stage, duration]) => {
+                logger.warn(`  - ${stage}: ${duration}ms`);
+            });
+            logger.warn(`  - Total elapsed: ${elapsedTotal}ms`);
+            
+            throw err;
         } finally {
             // ✅ 명시적 정리 추가
             try {
@@ -968,12 +1131,17 @@ class PdfService {
     async generatePdf(url, options) {
         const browser = await browserPool.acquire();
         let page = null;
+        const timings = {}; // 각 단계별 실행 시간 기록
+        let totalStart = Date.now();
 
         try {
             page = await browser.newPage();
 
             // ✅ 브라우저 페이지 초기화
+            let stageStart = Date.now();
             await this._setupBrowserPage(page);
+            timings.setupBrowserPage = Date.now() - stageStart;
+            logger.info(`[Timing] Setup browser page: ${timings.setupBrowserPage}ms`);
 
             // 로깅 및 옵션 추출
             const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth, screenshotPath } = options;
@@ -981,34 +1149,76 @@ class PdfService {
             logger.info(`Margin - Top: ${marginTop}, Bottom: ${marginBottom}, Left: ${marginLeft}, Right: ${marginRight}`);
             
             // ✅ 페이지 이동
+            stageStart = Date.now();
             await this._navigateToPage(page, url);
+            timings.navigateToPage = Date.now() - stageStart;
+            logger.info(`[Timing] Navigate to page: ${timings.navigateToPage}ms`);
 
             // ✅ Notion 토글 블록 모두 펼치기
+            stageStart = Date.now();
             await this._openAllToggleBlocks(page);
+            timings.openAllToggleBlocks = Date.now() - stageStart;
+            logger.info(`[Timing] Open all toggle blocks: ${timings.openAllToggleBlocks}ms`);
 
             // ✅ KaTeX CSS 주입
+            stageStart = Date.now();
             await this._injectKaTeXCSS(page);
+            timings.injectKaTeXCSS = Date.now() - stageStart;
+            logger.info(`[Timing] Inject KaTeX CSS: ${timings.injectKaTeXCSS}ms`);
 
             // ✅ 기본 PDF 렌더링 CSS 주입 (코드 블록 줄바꿈 등)
+            stageStart = Date.now();
             await this._injectPDFRenderingCSS(page);
+            timings.injectPDFRenderingCSS = Date.now() - stageStart;
+            logger.info(`[Timing] Inject PDF rendering CSS: ${timings.injectPDFRenderingCSS}ms`);
 
             // ✅ [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
+            stageStart = Date.now();
             const dimensions = await this._calculatePageDimensions(page, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
+            timings.calculatePageDimensions = Date.now() - stageStart;
+            logger.info(`[Timing] Calculate page dimensions: ${timings.calculatePageDimensions}ms`);
 
             // ✅ PDF 생성 전 최종 KaTeX 렌더링 검증
+            stageStart = Date.now();
             await this._validateKaTeXRendering(page);
+            timings.validateKaTeXRendering = Date.now() - stageStart;
+            logger.info(`[Timing] Validate KaTeX rendering: ${timings.validateKaTeXRendering}ms`);
 
             // ✅ 최종 뷰포트 조정 및 PDF 크기 계산
+            stageStart = Date.now();
             const pdfOptions = await this._adjustFinalViewport(page, dimensions);
+            timings.adjustFinalViewport = Date.now() - stageStart;
+            logger.info(`[Timing] Adjust final viewport: ${timings.adjustFinalViewport}ms`);
 
             // ✅ 디버그용 스크린샷 캡처 (선택사항)
+            stageStart = Date.now();
             await this._captureScreenshot(page, screenshotPath);
+            timings.captureScreenshot = Date.now() - stageStart;
+            logger.info(`[Timing] Capture screenshot: ${timings.captureScreenshot}ms`);
 
             // ✅ PDF 생성
+            stageStart = Date.now();
             const nodeStream = await this._createPDFStream(page, pdfOptions);
+            timings.createPDFStream = Date.now() - stageStart;
+            logger.info(`[Timing] Create PDF stream: ${timings.createPDFStream}ms`);
 
             // ✅ 스트림 정리 핸들러 등록
             await this._attachStreamCleanupHandlers(nodeStream, page, browser);
+
+            // 전체 타이밍 로그
+            timings.total = Date.now() - totalStart;
+            logger.info('[PDF Generation Timings Summary]');
+            logger.info(`  - Setup browser page: ${timings.setupBrowserPage}ms`);
+            logger.info(`  - Navigate to page: ${timings.navigateToPage}ms`);
+            logger.info(`  - Open toggle blocks: ${timings.openAllToggleBlocks}ms`);
+            logger.info(`  - Inject KaTeX CSS: ${timings.injectKaTeXCSS}ms`);
+            logger.info(`  - Inject PDF rendering CSS: ${timings.injectPDFRenderingCSS}ms`);
+            logger.info(`  - Calculate page dimensions: ${timings.calculatePageDimensions}ms`);
+            logger.info(`  - Validate KaTeX: ${timings.validateKaTeXRendering}ms`);
+            logger.info(`  - Adjust final viewport: ${timings.adjustFinalViewport}ms`);
+            logger.info(`  - Capture screenshot: ${timings.captureScreenshot}ms`);
+            logger.info(`  - Create PDF stream: ${timings.createPDFStream}ms`);
+            logger.info(`  - TOTAL: ${timings.total}ms`);
 
             return {
                 stream: nodeStream,
@@ -1016,7 +1226,14 @@ class PdfService {
             };
 
         } catch (error) {
-            logger.error(`PDF Generation failed: ${error.message}`);
+            // 에러 발생 시에도 지금까지의 진행 상황 로그
+            const elapsedTotal = Date.now() - totalStart;
+            logger.error(`PDF Generation failed after ${elapsedTotal}ms: ${error.message}`);
+            logger.warn('[PDF Generation Progress on Error]');
+            Object.entries(timings).forEach(([stage, duration]) => {
+                logger.warn(`  - ${stage}: ${duration}ms`);
+            });
+            logger.warn(`  - Total elapsed: ${elapsedTotal}ms`);
             
             // ✅ 에러 발생 시에도 명시적 정리
             try {
@@ -1046,10 +1263,16 @@ class PdfService {
      * @private
      */
     async _setupBrowserPage(page) {
-        // 보안 패치: 요청 필터링
+        // 보안 패치 + 성능 최적화: 요청 필터링
         await page.setRequestInterception(true);
+        
+        // 차단할 리소스 타입 (초기 로드 시에만)
+        const blockedResourceTypes = new Set(['image', 'media', 'font']);
+        const blockedUrls = ['doubleclick', 'analytics', 'google-analytics', 'facebook', 'twitter', 'ads', 'tracking'];
+        
         page.on('request', request => {
             const reqUrl = request.url().split('?')[0];
+            const resourceType = request.resourceType();
             const isMainFrame = request.isNavigationRequest() && request.frame() === page.mainFrame();
 
             // 유효한 프로토콜만 허용
@@ -1067,6 +1290,19 @@ class PdfService {
             const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(reqUrl);
             if (isLocal) return request.abort();
 
+            // ⚡ 성능 최적화: 초기 로드 시 불필요한 리소스 차단
+            // 이미지 차단 (로드 시간 단축, 나중에 로드)
+            if (blockedResourceTypes.has(resourceType)) {
+                logger.debug(`[Performance] Blocking ${resourceType}: ${reqUrl.substring(0, 80)}`);
+                return request.abort();
+            }
+
+            // 광고/추적 스크립트 차단
+            if (blockedUrls.some(blocked => reqUrl.includes(blocked))) {
+                logger.debug(`[Performance] Blocking tracking: ${reqUrl.substring(0, 80)}`);
+                return request.abort();
+            }
+
             request.continue();
         });
 
@@ -1081,8 +1317,10 @@ class PdfService {
     /**
      * Notion 페이지로 이동하고 네트워크 안정화를 대기합니다
      * 
-     * 모든 네트워크 요청이 완료될 때까지 대기하여 페이지가
-     * 완전히 로드되었음을 보장합니다.
+     * ⚡ 성능 최적화 전략:
+     *   1. 초기 goto: domcontentloaded로 HTML/CSS/JS만 로드
+     *   2. 요청 핸들러 변경: 모든 리소스 로드 허용
+     *   3. 백그라운드 리소스 로드 시간 확보
      * 
      * @param {Page} page - Puppeteer 페이지 인스턴스
      * @param {string} url - 이동할 Notion 페이지 URL
@@ -1091,8 +1329,32 @@ class PdfService {
      */
     async _navigateToPage(page, url) {
         logger.info(`Navigating to URL: ${url}`);
-        await page.goto(url, { waitUntil: 'networkidle0' });
-        logger.info('Page navigation completed');
+        
+        // 단계 1: 차단 상태로 빠르게 초기 로드
+        const gotoStart = Date.now();
+        await page.goto(url, { waitUntil: 'domcontentloaded' }); // HTML/CSS/JS만 로드
+        logger.info(`[Performance] Initial page load: ${Date.now() - gotoStart}ms (with blocked images/fonts)`);
+        
+        // 단계 2: 요청 핸들러 변경 - 모든 리소스 로드 허용
+        try {
+            page.removeAllListeners('request');
+            page.on('request', request => {
+                // 모든 요청을 허용 (이미지, 폰트 등 로드)
+                request.continue().catch(err => {
+                    logger.debug(`[Performance] Request continue failed: ${err.message}`);
+                });
+            });
+            logger.info('[Performance] Request handler updated to allow all resources');
+        } catch (err) {
+            logger.warn(`[Performance] Error updating request handler: ${err.message}`);
+        }
+        
+        // 단계 3: 이미지와 폰트가 백그라운드에서 로드될 시간 확보
+        const resourceLoadStart = Date.now();
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        logger.info(`[Performance] Background resource load time: ${Date.now() - resourceLoadStart}ms`);
+        
+        logger.info(`Page navigation completed (Total: ${Date.now() - gotoStart}ms)`);
     }
 
     /**
@@ -1101,7 +1363,7 @@ class PdfService {
      * 중첩된 토글을 포함하여 페이지 내 모든 토글 블록을 반복적으로 열고,
      * 각 반복마다 렌더링이 완료될 때까지 대기합니다.
      * 
-     * 최대 반복 횟수(20회)에 도달하면 작업을 종료합니다.
+     * 최대 반복 횟수(8회)에 도달하면 작업을 종료합니다.
      * (무한 루프 방지)
      * 
      * @param {Page} page - Puppeteer 페이지 인스턴스
@@ -1113,7 +1375,7 @@ class PdfService {
         try {
             let allToggleClosed = false;
             let iterationCount = 0;
-            const maxIterations = 20; // 무한 루프 방지
+            const maxIterations = 8; // 무한 루프 방지
             
             // 중첩된 토글까지 모두 처리하기 위해 반복 실행
             while (!allToggleClosed && iterationCount < maxIterations) {
@@ -1168,8 +1430,10 @@ class PdfService {
                 logger.warn('[PDF-Toggle] Max iterations reached, some toggles may still be closed');
             }
             
-            // 최종 안정화 대기
-            await page.waitForTimeout(1000);
+            // 최종 안정화 대기 (토글이 있었을 때만)
+            if (iterationCount > 1) {
+                await page.waitForTimeout(1000);
+            }
             logger.info('[PDF-Toggle] Toggle processing completed');
         } catch (err) {
             logger.warn(`[PDF-Toggle] Error opening toggles: ${err.message}`);
@@ -1345,7 +1609,7 @@ class PdfService {
                         img.decode().catch(err => {
                             console.warn(`이미지 디코딩 실패: ${img.src}`, err);
                         }),
-                        new Promise(resolve => setTimeout(resolve, 1000))
+                        new Promise(resolve => setTimeout(resolve, 100))
                     ]);
                 });
                 

@@ -128,7 +128,7 @@ tests/unit/
 - ✅ includeTitle, includeBanner, includeTags, includeDiscussion 옵션
 - ✅ 여백 옵션 (marginTop, marginBottom, marginLeft, marginRight)
 - ✅ 페이지 너비 커스터마이징 (pageWidth)
-- ✅ 토글 블록 펼치기 (최대 20회 반복)
+- ✅ 토글 블록 펼치기 (최대 8회 반복)
 - ✅ KaTeX CSS 주입
 - ✅ 동적 레이아웃 CSS 생성
 - ✅ 초기 및 최종 뷰포트 설정
