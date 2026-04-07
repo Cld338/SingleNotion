@@ -662,6 +662,7 @@ class PdfService {
             
             const contentEl = document.querySelector('.notion-page-content');
             const width = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) : 1080;
+            const height = contentEl ? Math.ceil(contentEl.getBoundingClientRect().height) : 0;
             
             // --- [수정된 부분] 옵션에 따라 HTML 블록들을 추출하여 병합 ---
             let htmlParts = [];
@@ -937,6 +938,7 @@ class PdfService {
             // 메타 정보 함께 반환
             return {
                 detectedWidth: width,
+                detectedHeight: height,
                 html: html,
                 resources: resources,
                 debug: debugInfo

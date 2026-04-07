@@ -84,12 +84,18 @@ class StandardEditApp {
             Logger.log('INIT Response received', 'success', {
                 htmlLength: data.html?.length || 0,
                 detectedWidth: data.detectedWidth,
+                detectedHeight: data.detectedHeight,
                 cssCount: data.resources?.cssLinks?.length || 0,
                 source: data.metadata?.source || 'direct'
             });
 
             if (!data.html) {
                 throw new Error('No HTML content received from server');
+            }
+
+            // ⚠️ Height가 0px인 경우 경고 표시
+            if (data.detectedHeight === 0) {
+                alert('⚠️ 페이지에 콘텐츠가 없습니다\n\n우측 상단 \'공유\'에서 게시(웹에서 게시) 또는링크가 있는 모든 사용자 상태여야 합니다.');
             }
 
             const { html, detectedWidth, resources, metadata } = data;

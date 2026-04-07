@@ -100,9 +100,9 @@ router.get('/preview-html', async (req, res) => {
             throw new Error('No preview data returned');
         }
 
-        const { detectedWidth, html, resources } = previewData;
+        const { detectedWidth, detectedHeight, html, resources } = previewData;
         
-        logger.info(`Preview loaded - Detected width: ${detectedWidth}px, HTML length: ${html.length}, CSS: ${resources?.cssLinks?.length || 0}, JS: ${resources?.jsScripts?.length || 0}`);
+        logger.info(`Preview loaded - Detected width: ${detectedWidth}px, Height: ${detectedHeight}px, HTML length: ${html.length}, CSS: ${resources?.cssLinks?.length || 0}, JS: ${resources?.jsScripts?.length || 0}`);
         
         // 모든 외부 URL과 상대 경로를 proxy-asset으로 변환 (CORS 에러 방지)
         let processedHtml = html;
@@ -117,6 +117,7 @@ router.get('/preview-html', async (req, res) => {
         res.json({
             html: processedHtml,
             detectedWidth: detectedWidth,
+            detectedHeight: detectedHeight,
             resources: resources || {
                 cssLinks: [],
                 inlineStyles: []
