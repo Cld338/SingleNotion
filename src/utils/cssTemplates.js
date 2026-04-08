@@ -229,6 +229,117 @@ class CSSTemplates {
     }
 
     /**
+     * PDF 인쇄(headless Chromium)용 @media print CSS를 반환합니다
+     * 
+     * Puppeteer의 headless Chromium은 @media print 쿼리를 활성화하여 PDF를 생성합니다.
+     * 이 CSS는 standard-edit-app.js의 @media print 규칙과 동일한 스타일을 정의하므로,
+     * PDF 렌더링이 웹 미리보기와 동일한 레이아웃을 유지합니다.
+     * 
+     * 주요 기능:
+     *   - 배경색/이미지 정확도 보존 (print-color-adjust: exact)
+     *   - UI 요소 완전 제거 (navbar, sidebar, loading 오버레이)
+     *   - 색상 선택 보존 및 불필요한 효과 제거
+     *   - 블록 선택 UI 제거 (outline, border, box-shadow)
+     *   - KaTeX 수식 중복 렌더링 방지 (MathML, annotation 숨김)
+     *   - 코드 블록 줄바꿈 보존 (white-space: pre-wrap)
+     * 
+     * @returns {string} @media print 관련 CSS 문자열
+     */
+    static get PRINT_MEDIA_CSS() {
+        return `
+            @media print {
+                /* ✅ 배경색과 블록 배경 이미지를 정확하게 표시 */
+                body {
+                    margin: 0;
+                    padding: 0;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+
+                /* ✅ 불필요한 UI 요소 완전 제거 */
+                .navbar, .sidebar, .loading-overlay,
+                .page-break-marker, .page-break-line, .page-number-label,
+                .notion-topbar, .notion-topbar-mobile,
+                .notion-help-button, header,
+                .notion-history-container,
+                .floating-table-of-contents {
+                    display: none !important;
+                }
+
+                /* ✅ 블록 선택 시 나타나는 UI 효과 제거 */
+                .notion-selectable-block, .selected-break, .block-has-break {
+                    outline: none !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    background: transparent !important;
+                }
+
+                /* ✅ 텍스트 선택 효과 및 기타 상호작용 제거 */
+                *::selection,
+                *::-moz-selection {
+                    background: transparent !important;
+                }
+
+                /* ✅ KaTeX 수식 중복 렌더링 방지 */
+                .katex-mathml,
+                .katex-display .katex-mathml,
+                .katex > .katex-mathml,
+                .annotation,
+                .MathJax_Preview {
+                    display: none !important;
+                }
+
+                /* ✅ 링크 기본 스타일 유지 */
+                a {
+                    color: inherit !important;
+                    text-decoration: inherit !important;
+                }
+
+                /* ✅ 비활성 요소 스타일 제거 */
+                .notion-disabled,
+                [disabled] {
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+
+                /* ✅ 스크롤바 제거 */
+                ::-webkit-scrollbar {
+                    display: none !important;
+                }
+
+                /* ✅ 브라우저 기본 스타일 오버라이드 방지 */
+                img {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    max-width: 100% !important;
+                    height: auto !important;
+                }
+
+                table {
+                    border-collapse: collapse !important;
+                }
+
+                table, tbody, tr, td, th {
+                    page-break-inside: avoid !important;
+                }
+
+                h1, h2, h3, h4, h5, h6,
+                p {
+                    page-break-after: avoid !important;
+                    page-break-inside: avoid !important;
+                }
+
+                /* ✅ 코드 블록 스타일 유지 */
+                .notion-code-block {
+                    white-space: pre-wrap !important;
+                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+                    page-break-inside: avoid !important;
+                }
+            }
+        `;
+    }
+
+    /**
      * 감지된 페이지 크기와 패딩을 바탕으로 동적 레이아웃 CSS를 생성합니다
      * 
      * PDF의 실제 너비(detectedWidth)에 맞추어 Notion 요소들의 너비와 패딩을 조정합니다.
@@ -318,7 +429,7 @@ class CSSTemplates {
     /**
      * 모든 CSS 템플릿을 조합하여 완전한 PDF 렌더링용 CSS를 생성합니다
      * 
-     * 이 함수는 기본 레이아웃, 코드 블록, KaTeX 렌더링, 동적 레이아웃 CSS를
+     * 이 함수는 기본 레이아웃, 코드 블록, KaTeX 렌더링, print media, 동적 레이아웃 CSS를
      * 순서대로 결합하여 최종 CSS 문자열을 생성합니다.
      * 이렇게 생성된 CSS는 HTML의 <style> 태그에 직접 삽입되어 PDF 렌더링을 제어합니다.
      * 
@@ -326,7 +437,8 @@ class CSSTemplates {
      *   1. 기본 레이아웃 CSS (BASE_LAYOUT_CSS) - UI 요소 제거
      *   2. 코드 블록 CSS (CODE_BLOCK_CSS) - 코드 표시 형식
      *   3. KaTeX 렌더링 CSS (KATEX_RENDERING_CSS) - 수식 렌더링
-     *   4. 동적 레이아웃 CSS (generateDynamicLayoutCSS) - 페이지별 커스텀 레이아웃
+     *   4. Print Media CSS (PRINT_MEDIA_CSS) - @media print 규칙 (배경색 보존, 코드 줄바꿈, KaTeX 최적화)
+     *   5. 동적 레이아웃 CSS (generateDynamicLayoutCSS) - 페이지별 커스텀 레이아웃
      * 
      * @param {Object} params - 동적 레이아웃 생성을 위한 모든 매개변수
      *                         (generateDynamicLayoutCSS 함수의 params와 동일)
@@ -343,9 +455,10 @@ class CSSTemplates {
         const baseCSS = CSSTemplates.BASE_LAYOUT_CSS;
         const codeCSS = CSSTemplates.CODE_BLOCK_CSS;
         const katexCSS = CSSTemplates.KATEX_RENDERING_CSS;
+        const printMediaCSS = CSSTemplates.PRINT_MEDIA_CSS;
         const dynamicCSS = CSSTemplates.generateDynamicLayoutCSS(params);
 
-        return `${baseCSS}\n${codeCSS}\n${katexCSS}\n${dynamicCSS}`;
+        return `${baseCSS}\n${codeCSS}\n${katexCSS}\n${printMediaCSS}\n${dynamicCSS}`;
     }
 }
 

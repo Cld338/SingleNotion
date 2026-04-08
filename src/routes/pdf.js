@@ -41,7 +41,8 @@ const renderHtmlLimiter = rateLimit({
 });
 
 const convertSchema = Joi.object({
-    url: Joi.string().uri().required(),
+    url: Joi.string().uri().optional(),
+    sessionId: Joi.string().hex().length(24).optional(),
     mode: Joi.string().valid('standard', 'full').default('full'),
     format: Joi.string().valid('A4', 'A3', 'B5', 'Letter').default('A4'),
     pageBreaks: Joi.array().items(Joi.number().min(0)).default([]),
@@ -137,18 +138,34 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
             if (typeof rawBody[key] === 'string') rawBody[key] = rawBody[key].toLowerCase() === 'true';
         });
 
-        const { error, value } = convertSchema.validate(rawBody);
-        if (error) return res.status(400).json({ error: error.details[0].message });
+        const { error, value } = await convertSchema.validate(rawBody);
+        if (error) {
+            logger.warn(`Validation error: ${error.message}`);
+            return res.status(400).json({ error: error.details[0]?.message || 'Validation failed' });
+        }
+        
+        if (!value) {
+            logger.error('Validation returned no value');
+            return res.status(400).json({ error: 'Validation failed: no value returned' });
+        }
+        
+        // url과 sessionId 중 하나는 반드시 있어야 함
+        if (!value.url && !value.sessionId) {
+            return res.status(400).json({ error: 'Either "url" or "sessionId" is required' });
+        }
 
-        // 노션 도메인 추가 검증
-        const domainValidation = validateNotionDomain(value.url);
-        if (!domainValidation.valid) {
-            logger.warn(`Invalid Notion domain: ${value.url}`);
-            return res.status(400).json({ error: domainValidation.error });
+        // 노션 도메인 추가 검증 (url이 제공된 경우에만)
+        if (value.url) {
+            const domainValidation = validateNotionDomain(value.url);
+            if (!domainValidation.valid) {
+                logger.warn(`Invalid Notion domain: ${value.url}`);
+                return res.status(400).json({ error: domainValidation.error });
+            }
         }
 
         const job = await pdfQueue.add('convert', {
-            targetUrl: value.url,
+            targetUrl: value.url || null,
+            sessionId: value.sessionId || null,
             options: { 
                 mode: value.mode,
                 format: value.format,
@@ -172,11 +189,82 @@ router.post('/convert-url', convertLimiter, async (req, res) => {
             removeOnFail: 500      // 실패한 작업(DLQ)은 분석을 위해 500개까지 보관
         });
 
-        logger.info(`Job ${job.id} added to queue for URL: ${value.url}`);
+        logger.info(`Job ${job.id} added to queue${value.url ? ` for URL: ${value.url}` : ' (using cached session)'}${value.sessionId ? ` (sessionId: ${value.sessionId})` : ''}`);
         res.status(202).json({ jobId: job.id, message: '변환 대기열에 등록되었습니다.' });
 
     } catch (err) {
         logger.error(`Failed to enqueue job: ${err.message}`);
+        res.status(500).json({ error: '서버 내부 오류로 대기열 등록에 실패했습니다.' });
+    }
+});
+
+/**
+ * Alias endpoint for backward compatibility
+ * /convert-from-session delegates to /convert-url
+ */
+router.post('/convert-from-session', convertLimiter, async (req, res) => {
+    try {
+        const rawBody = { ...req.body };
+        ['includeBanner', 'includeTitle', 'includeTags'].forEach(key => {
+            if (typeof rawBody[key] === 'string') rawBody[key] = rawBody[key].toLowerCase() === 'true';
+        });
+
+        const { error, value } = await convertSchema.validate(rawBody);
+        if (error) {
+            logger.warn(`Validation error: ${error.message}`);
+            return res.status(400).json({ error: error.details[0]?.message || 'Validation failed' });
+        }
+        
+        if (!value) {
+            logger.error('Validation returned no value');
+            return res.status(400).json({ error: 'Validation failed: no value returned' });
+        }
+        
+        // url과 sessionId 중 하나는 반드시 있어야 함
+        if (!value.url && !value.sessionId) {
+            return res.status(400).json({ error: 'Either "url" or "sessionId" is required' });
+        }
+
+        // 노션 도메인 추가 검증 (url이 제공된 경우에만)
+        if (value.url) {
+            const domainValidation = validateNotionDomain(value.url);
+            if (!domainValidation.valid) {
+                logger.warn(`Invalid Notion domain: ${value.url}`);
+                return res.status(400).json({ error: domainValidation.error });
+            }
+        }
+
+        const job = await pdfQueue.add('convert', {
+            targetUrl: value.url || null,
+            sessionId: value.sessionId || null,
+            options: { 
+                mode: value.mode,
+                format: value.format,
+                pageBreaks: value.pageBreaks,
+                includeBanner: value.includeBanner,
+                includeTitle: value.includeTitle,
+                includeTags: value.includeTags,
+                marginTop: value.marginTop,
+                marginBottom: value.marginBottom,
+                marginLeft: value.marginLeft,
+                marginRight: value.marginRight,
+                pageWidth: value.pageWidth
+            }
+        }, {
+            attempts: 5,
+            backoff: {
+                type: 'exponential',
+                delay: 1000
+            },
+            removeOnComplete: 100,
+            removeOnFail: 500
+        });
+
+        logger.info(`[Backward Compat] Job ${job.id} added via /convert-from-session${value.url ? ` for URL: ${value.url}` : ' (using cached session)'}${value.sessionId ? ` (sessionId: ${value.sessionId})` : ''}`);
+        res.status(202).json({ jobId: job.id, message: '변환 대기열에 등록되었습니다.' });
+
+    } catch (err) {
+        logger.error(`Failed to enqueue job via /convert-from-session: ${err.message}`);
         res.status(500).json({ error: '서버 내부 오류로 대기열 등록에 실패했습니다.' });
     }
 });
@@ -488,6 +576,84 @@ router.get('/session-data/:sessionId', async (req, res) => {
         logger.error(`Failed to retrieve session data: ${err.message}`, { stack: err.stack });
         if (!res.headersSent) {
             res.status(500).json({ error: 'Failed to retrieve session data' });
+        }
+    }
+});
+
+/**
+ * 캐시된 세션 HTML을 렌더링 가능한 형태로 반환
+ * Puppeteer에서 직접 로드할 수 있는 완전한 HTML 문서로 변환
+ * 
+ * GET /render-cache/:sessionId
+ * 
+ * 응답: HTML 문서 (모든 경로가 /proxy-asset으로 변환됨)
+ * - <base href="{baseUrl}"> 주입으로 상대 경로 해석
+ * - 모든 외부 URL을 /proxy-asset으로 변환
+ * - Puppeteer에 의해 직접 렌더링 가능
+ */
+router.get('/render-cache/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+
+        // sessionId 유효성 검사 (16진수 24자리)
+        if (!/^[a-f0-9]{24}$/.test(sessionId)) {
+            logger.warn(`Invalid sessionId format in render-cache: ${sessionId}`);
+            return res.status(400).type('text/html').send('<html><body>Invalid sessionId format</body></html>');
+        }
+
+        const sessionKey = `extension-session:${sessionId}`;
+        const sessionDataStr = await connection.get(sessionKey);
+
+        if (!sessionDataStr) {
+            logger.warn(`Session not found for render-cache: sessionId=${sessionId}`);
+            return res.status(404).type('text/html').send('<html><body>Session data not found or expired</body></html>');
+        }
+
+        const sessionData = JSON.parse(sessionDataStr);
+        let { html } = sessionData;
+
+        logger.info(`[Render-Cache] Retrieved session: sessionId=${sessionId}, htmlLength=${html.length}`);
+
+        // ✅ [FIXED] 단일 변환으로 통일 (standard-edit과 동일한 프로세스)
+        // render-cache는 이미 캐시된 HTML을 서빙하므로, 
+        // 상대 경로는 이미 절대 경로이거나 상대 경로로 유지됨
+        // 따라서 convertAll() 제거 후 convertAllToProxyAsset() 만 사용하여
+        // standard-edit과 동일한 CSS 로드 동작 보장
+        const baseUrl = sessionData.metadata?.baseUrl || sessionData.metadata?.url;
+        if (html && baseUrl) {
+            logger.debug(`[Render-Cache] Converting URLs to proxy-asset (single pass) with baseUrl: ${baseUrl}`);
+            html = URLPathConverter.convertAllToProxyAsset(html, baseUrl);
+            logger.debug(`[Render-Cache] Proxy-asset conversion completed`);
+        }
+
+        // [Step 2] HTML 헤드에 <base href> 태그 삽입
+        // 이는 Puppeteer 렌더링 시 상대 경로 리소스 로드의 fallback 역할
+        if (baseUrl && html) {
+            const baseTag = `<base href="${baseUrl}">`;
+            // <head> 태그의 가장 처음 자식 위치에 base 태그 삽입
+            html = html.replace(/<head[^>]*>/i, (match) => {
+                return match + '\n' + baseTag;
+            });
+            
+            // <head> 태그가 없으면 <html> 바로 뒤에 <head> 생성
+            if (!/<head[^>]*>/i.test(html)) {
+                html = html.replace(/<html[^>]*>/i, (match) => {
+                    return match + '\n<head>\n' + baseTag + '\n</head>';
+                });
+            }
+            
+            logger.debug(`[Render-Cache] Base tag injected: ${baseUrl}`);
+        }
+
+        // [Step 3] HTML을 puppeteer에서 로드 가능한 형태로 반환
+        res.type('text/html').set('Cache-Control', 'no-cache, no-store, must-revalidate').send(html);
+
+        logger.info(`[Render-Cache] Successfully returned cached HTML: sessionId=${sessionId}`);
+
+    } catch (err) {
+        logger.error(`Failed to render cached session: ${err.message}`, { stack: err.stack });
+        if (!res.headersSent) {
+            res.status(500).type('text/html').send('<html><body>Failed to render cached session</body></html>');
         }
     }
 });

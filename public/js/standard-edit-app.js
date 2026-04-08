@@ -825,6 +825,7 @@ class StandardEditApp {
                 const margins = this.getMargins();
                 const options = {
                     url: this.notionUrl,
+                    sessionId: this.sessionId || undefined,
                     includeTitle: document.getElementById('chk-title').checked,
                     includeBanner: document.getElementById('chk-banner').checked,
                     includeTags: document.getElementById('chk-tags').checked,

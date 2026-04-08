@@ -29,6 +29,7 @@ services:
       - REDIS_HOST=redis-test
       - REDIS_PORT=6379
       - NODE_ENV=development
+      - SERVER_URL=http://fastapi-app-test:3000
     volumes:
       - ./public/downloads:/usr/src/public/downloads
     networks:      

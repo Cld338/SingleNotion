@@ -22,8 +22,8 @@ const memoryMonitorInterval = setInterval(() => {
 
 // Worker 인스턴스 생성 및 안정화 설정
 const worker = new Worker('pdf-conversion', async (job) => {
-    const { targetUrl, options } = job.data;
-    logger.info(`[Job ${job.id}] Start processing: ${targetUrl} (Attempt: ${job.attemptsMade + 1})`);
+    const { targetUrl, options, sessionId } = job.data;
+    logger.info(`[Job ${job.id}] Start processing: ${targetUrl} (sessionId: ${sessionId || 'none'}, Attempt: ${job.attemptsMade + 1})`);
     
     // ✅ 작업 시작 메모리 측정
     logMemoryUsage(`Start Job ${job.id}`);
@@ -31,8 +31,8 @@ const worker = new Worker('pdf-conversion', async (job) => {
     const startTime = performance.now(); // 변환 시작 시간 기록
 
     try {
-        // 변경: stream과 detectedWidth를 받아옴
-        const { stream: pdfStream, detectedWidth } = await pdfService.generatePdf(targetUrl, options);
+        // 변경: stream과 detectedWidth를 받아옴, sessionId 전달
+        const { stream: pdfStream, detectedWidth } = await pdfService.generatePdf(targetUrl, options, sessionId);
         
         const fileName = `notion-${job.id}-${Date.now()}.pdf`;
         const downloadUrl = await storage.saveStream(fileName, pdfStream);

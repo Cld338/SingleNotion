@@ -4,6 +4,7 @@ const browserPool = require('../utils/browserPool');
 const URLPathConverter = require('../utils/urlPathConverter');
 const CSSTemplates = require('../utils/cssTemplates');
 const PageEvaluationScripts = require('../utils/pageEvaluationScripts');
+const { connection } = require('../config/queue');
 const { log } = require('console');
 
 class PdfService {
@@ -1103,7 +1104,7 @@ class PdfService {
      * 
      * 주어진 Notion 페이지 URL을 열고, 다음 단계를 거쳐 PDF를 생성합니다:
      *   1. 페이지 초기화 및 보안 설정
-     *   2. Notion 페이지 로드
+     *   2. Notion 페이지 로드 (또는 캐시된 세션 데이터 사용)
      *   3. 토글 블록 펼치기
      *   4. KaTeX CSS 주입
      *   5. 페이지 치수 계산 및 스타일 최적화
@@ -1123,6 +1124,7 @@ class PdfService {
      * @param {number} [options.marginRight=0] - 우측 여백 (픽셀)
      * @param {number} [options.pageWidth] - PDF 페이지 너비 (픽셀, 미지정 시 자동)
      * @param {string} [options.screenshotPath] - 디버그용 스크린샷 저장 경로
+     * @param {string} [sessionId] - (선택사항) Extension에서 캡처한 세션 ID (Redis에 저장된 캐시된 HTML 사용)
      * 
      * @returns {Promise<Object>} PDF 생성 결과
      *   - stream: {ReadableStream} PDF 데이터의 읽기 스트림
@@ -1130,18 +1132,38 @@ class PdfService {
      * 
      * @throws {Error} PDF 생성 실패 또는 페이지 로드 실패
      */
-    async generatePdf(url, options) {
+    async generatePdf(url, options, sessionId = null) {
         const browser = await browserPool.acquire();
         let page = null;
         const timings = {}; // 각 단계별 실행 시간 기록
         let totalStart = Date.now();
+        let cachedSessionData = null;
 
         try {
+            // ✅ 캐시된 세션 데이터 확인 (Extension에서 캡처한 데이터)
+            if (sessionId) {
+                try {
+                    const stageStart = Date.now();
+                    const sessionKey = `extension-session:${sessionId}`;
+                    const sessionDataJson = await connection.get(sessionKey);
+                    
+                    if (sessionDataJson) {
+                        cachedSessionData = JSON.parse(sessionDataJson);
+                        timings.cacheRetrieval = Date.now() - stageStart;
+                        logger.info(`[PDF] Cache hit for sessionId: ${sessionId}, retrieved in ${timings.cacheRetrieval}ms`);
+                    } else {
+                        logger.warn(`[PDF] Cache miss for sessionId: ${sessionId}, will fallback to URL navigation`);
+                    }
+                } catch (cacheErr) {
+                    logger.warn(`[PDF] Failed to retrieve cached session: ${cacheErr.message}, will fallback to URL navigation`);
+                }
+            }
+
             page = await browser.newPage();
 
             // ✅ 브라우저 페이지 초기화
             let stageStart = Date.now();
-            await this._setupBrowserPage(page);
+            await this._setupBrowserPage(page, !!cachedSessionData);
             timings.setupBrowserPage = Date.now() - stageStart;
             logger.info(`[Timing] Setup browser page: ${timings.setupBrowserPage}ms`);
 
@@ -1152,7 +1174,7 @@ class PdfService {
             
             // ✅ 페이지 이동
             stageStart = Date.now();
-            await this._navigateToPage(page, url);
+            await this._navigateToPage(page, url, cachedSessionData, sessionId);
             timings.navigateToPage = Date.now() - stageStart;
             logger.info(`[Timing] Navigate to page: ${timings.navigateToPage}ms`);
 
@@ -1176,7 +1198,7 @@ class PdfService {
 
             // ✅ [Extension 로직 이식] 너비 자동 감지 및 스타일 최적화
             stageStart = Date.now();
-            const dimensions = await this._calculatePageDimensions(page, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
+            const dimensions = await this._calculatePageDimensions(page, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth, cachedSessionData });
             timings.calculatePageDimensions = Date.now() - stageStart;
             logger.info(`[Timing] Calculate page dimensions: ${timings.calculatePageDimensions}ms`);
 
@@ -1261,10 +1283,11 @@ class PdfService {
      *   4. Navigation Timeout - 120초
      * 
      * @param {Page} page - Puppeteer 페이지 인스턴스
+     * @param {boolean} [usesCachedData=false] - 캐시된 세션 데이터 사용 여부 (true면 localhost 허용)
      * @returns {Promise<void>}
      * @private
      */
-    async _setupBrowserPage(page) {
+    async _setupBrowserPage(page, usesCachedData = false) {
         // 보안 패치 + 성능 최적화: 요청 필터링
         await page.setRequestInterception(true);
         
@@ -1282,15 +1305,23 @@ class PdfService {
                 return request.abort();
             }
 
-            // 메인 프레임: Notion 도메인만 허용
+            // ✅ render-cache 엔드포인트 확인 (어떤 호스트든 허용 - localhost, 127.0.0.1, Docker 서비스명 등)
+            const isRenderCacheEndpoint = usesCachedData && reqUrl.includes('/render-cache/') && reqUrl.includes('http');
+            
+            // 메인 프레임: 노션 도메인 또는 render-cache 엔드포인트 허용
             if (isMainFrame) {
                 const isNotionDomain = /^https?:\/\/([a-zA-Z0-9-]+\.)?(notion\.so|notion\.site)/.test(reqUrl);
-                if (!isNotionDomain) return request.abort();
+                
+                if (!isNotionDomain && !isRenderCacheEndpoint) {
+                    return request.abort();
+                }
             }
 
-            // 로컬 요청 차단
+            // 로컬 요청 차단 (render-cache 엔드포인트 제외)
             const isLocal = /^(http|https):\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|::1)/.test(reqUrl);
-            if (isLocal) return request.abort();
+            if (isLocal && !isRenderCacheEndpoint) {
+                return request.abort();
+            }
 
             // ⚡ 성능 최적화: 초기 로드 시 불필요한 리소스 차단
             // 이미지 차단 (로드 시간 단축, 나중에 로드)
@@ -1319,22 +1350,41 @@ class PdfService {
     /**
      * Notion 페이지로 이동하고 네트워크 안정화를 대기합니다
      * 
+     * 캐시된 세션 데이터가 있으면 로컬 /render-cache 엔드포인트로 이동합니다.
+     * 캐시가 없으면 직접 Notion URL로 이동합니다.
+     * 
      * ⚡ 성능 최적화 전략:
      *   1. 초기 goto: domcontentloaded로 HTML/CSS/JS만 로드
      *   2. 요청 핸들러 변경: 모든 리소스 로드 허용
      *   3. 백그라운드 리소스 로드 시간 확보
      * 
      * @param {Page} page - Puppeteer 페이지 인스턴스
-     * @param {string} url - 이동할 Notion 페이지 URL
+     * @param {string} url - 이동할 Notion 페이지 URL (캐시 없을 때 사용)
+     * @param {Object} [cachedSessionData] - 캐시된 세션 데이터 (있으면 렌더-캐시 엔드포인트 사용)
+     * @param {string} [sessionId] - 세션 ID (캐시 사용 시 필요)
      * @returns {Promise<void>}
      * @private
      */
-    async _navigateToPage(page, url) {
-        logger.info(`Navigating to URL: ${url}`);
+    async _navigateToPage(page, url, cachedSessionData = null, sessionId = null) {
+        // 네비게이션할 URL 결정: 캐시 있으면 localhost 엔드포인트, 없으면 원본 URL
+        let navigationUrl;
+        
+        if (cachedSessionData && sessionId) {
+            // 로컬 render-cache 엔드포인트 사용
+            // 환경변수 SERVER_URL이 설정되어 있으면 사용 (Docker 환경용)
+            // 아니면 localhost:port 사용 (로컬 개발용)
+            const serverUrl = process.env.SERVER_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+            navigationUrl = `${serverUrl}/render-cache/${sessionId}`;
+        } else {
+            navigationUrl = url;
+        }
+        
+        const navType = cachedSessionData ? 'render-cache (cached)' : 'direct URL';
+        logger.info(`Navigating to ${navType}: ${navigationUrl}`);
         
         // 단계 1: 차단 상태로 빠르게 초기 로드
         const gotoStart = Date.now();
-        await page.goto(url, { waitUntil: 'domcontentloaded' }); // HTML/CSS/JS만 로드
+        await page.goto(navigationUrl, { waitUntil: 'domcontentloaded' }); // HTML/CSS/JS만 로드
         logger.info(`[Performance] Initial page load: ${Date.now() - gotoStart}ms (with blocked images/fonts)`);
         
         // 단계 2: 요청 핸들러 변경 - 모든 리소스 로드 허용
@@ -1491,22 +1541,23 @@ class PdfService {
      * @private
      */
     async _injectPDFRenderingCSS(page) {
-        logger.info('Injecting PDF rendering CSS templates (BASE_LAYOUT, CODE_BLOCK, KATEX)...');
+        logger.info('Injecting PDF rendering CSS templates (BASE_LAYOUT, CODE_BLOCK, KATEX, PRINT_MEDIA)...');
         
         try {
             // 기본 CSS 템플릿들을 결합
             const baseCSS = CSSTemplates.BASE_LAYOUT_CSS;
             const codeBlockCSS = CSSTemplates.CODE_BLOCK_CSS;
             const katexCSS = CSSTemplates.KATEX_RENDERING_CSS;
+            const printMediaCSS = CSSTemplates.PRINT_MEDIA_CSS;
             
-            const combinedCSS = `${baseCSS}\n${codeBlockCSS}\n${katexCSS}`;
+            const combinedCSS = `${baseCSS}\n${codeBlockCSS}\n${katexCSS}\n${printMediaCSS}`;
             
             // <style> 태그로 페이지에 주입
             await page.addStyleTag({
                 content: combinedCSS
             });
             
-            logger.info('✅ PDF rendering CSS injected successfully (BASE_LAYOUT + CODE_BLOCK + KATEX)');
+            logger.info('✅ PDF rendering CSS injected successfully (BASE_LAYOUT + CODE_BLOCK + KATEX + PRINT_MEDIA)');
         } catch (err) {
             logger.error(`Failed to inject PDF rendering CSS: ${err.message}`);
             throw err;
@@ -1531,22 +1582,37 @@ class PdfService {
      * @private
      */
     async _calculatePageDimensions(page, options) {
-        const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = options;
+        const { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth, cachedSessionData } = options;
+        
+        // ✅ 캐시 데이터의 너비 정보 우선 사용
+        const cachedWidth = cachedSessionData?.detectedWidth || null;
+        logger.info(`[Dimensions] Cached width available: ${cachedWidth}px`);
         
         const dimensions = await page.evaluate(async (opts) => {
-            const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth } = opts;
+            const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth, cachedWidth } = opts;
 
-            // A. 너비 자동 감지
-            const contentEl = document.querySelector('.notion-page-content');
-            const detectedWidth = contentEl ? Math.ceil(contentEl.getBoundingClientRect().width) + 200: 1080;
-
-            // ✅ FIX: 너비를 축소하지 않도록 scale 계산 개선
-            // pageWidth가 지정되었을 때, 감지된 너비보다 작으면 무시하고 감지된 너비 사용
-            // (너비 축소로 인한 텍스트 줄바꿈 문제 해결)
-            const effectivePageWidth = (pageWidth && pageWidth >= detectedWidth) ? pageWidth : detectedWidth;
-            const scale = effectivePageWidth / detectedWidth;
+            // A. 너비 우선순위: pageWidth(사용자 설정) > cachedWidth(캐시) > detectedWidth(감지) > 1080(기본값)
+            let detectedWidth = 1080; // 기본값
             
-            console.log(`[Dimensions] Detected: ${detectedWidth}px, Requested: ${pageWidth}px, Effective: ${effectivePageWidth}px, Scale: ${scale}`);
+            // 1️⃣ 사용자가 pageWidth를 명시적으로 지정했으면 그것을 우선 사용
+            if (pageWidth && pageWidth > 0) {
+                detectedWidth = pageWidth;
+            }
+            // 2️⃣ pageWidth가 없으면 캐시 데이터 너비 사용
+            else if (cachedWidth && cachedWidth > 0) {
+                detectedWidth = cachedWidth;
+            } 
+            // 3️⃣ 캐시도 없으면 URL 방식: .notion-page-content 요소에서 너비 감지
+            else {
+                const contentEl = document.querySelector('.notion-page-content');
+                if (contentEl) {
+                    detectedWidth = Math.ceil(contentEl.getBoundingClientRect().width) + 200;
+                }
+            }
+
+            // ✅ Scale 계산: 기본 너비는 이제 detectedWidth와 동일
+            const effectivePageWidth = detectedWidth;
+            const scale = effectivePageWidth / detectedWidth;
             
             const padTop = (Number(marginTop) || 0) / scale;
             const padBottom = (Number(marginBottom) || 0) / scale;
@@ -1558,7 +1624,6 @@ class PdfService {
                 return new Promise((resolve) => {
                     const existingKaTeX = document.querySelector('link[href*="katex"]');
                     if (existingKaTeX) {
-                        console.log('[KaTeX] CSS already loaded from CDN');
                         resolve();
                         return;
                     }
@@ -1569,12 +1634,10 @@ class PdfService {
                     link.crossOrigin = 'anonymous';
                     
                     link.onload = () => {
-                        console.log('[KaTeX] CSS loaded successfully');
                         resolve();
                     };
                     
                     link.onerror = () => {
-                        console.warn('[KaTeX] CSS load failed, continuing anyway');
                         resolve();
                     };
                     
@@ -1680,6 +1743,25 @@ class PdfService {
 
             // 레이아웃 고정 CSS 생성 + 페이지 너비 제약
             let freezeCSS = "";
+            
+            // 🔍 캐시 HTML 구조 디버깅
+            if (cachedWidth) {
+                (`[Debug] HTML Structure (Cache Mode):`);
+                console.log(`  - body: ${!!document.body}`);
+                console.log(`  - body.children.length: ${document.body.children.length}`);
+                console.log(`  - .notion-page-content: ${!!document.querySelector('.notion-page-content')}`);
+                console.log(`  - .layout: ${!!document.querySelector('.layout')}`);
+                console.log(`  - main: ${!!document.querySelector('main')}`);
+                
+                // 최상위 컨테이너 찾기
+                const topLevelContainer = document.querySelector('main, [role="main"], .main-content, body > div:first-child');
+                if (topLevelContainer) {
+                    const rect = topLevelContainer.getBoundingClientRect();
+                    console.log(`  - Top-level container: ${topLevelContainer.className || topLevelContainer.tagName}`);
+                    console.log(`  - Top-level size: ${Math.ceil(rect.width)}x${Math.ceil(rect.height)}`);
+                }
+            }
+            
             const layoutElements = document.querySelectorAll('.notion-image-block, .notion-asset-wrapper, div[data-block-id][style*="width"]');
             layoutElements.forEach((el, index) => {
                 const id = `sn-freeze-${index}`;
@@ -1700,12 +1782,30 @@ class PdfService {
             const padTopIdx = includeBanner ? 3 : (includeTags ? 4 : 5);
             const totalLayoutWidth = detectedWidth + padLeft + padRight;
             
-            // padding-top CSS 추가
-            if (padTop > 0) {
-                freezeCSS += `
+            // padding 적용
+            // ✅ 캐시 방식과 URL 방식을 구분하여 처리
+            if (cachedWidth) {
+                // 캐시 데이터: body에 모든 여백 적용 (CSS padding으로 처리)
+                const bodyMargins = [];
+                if (padTop > 0) bodyMargins.push(`padding-top: ${padTop}px`);
+                if (padBottom > 0) bodyMargins.push(`padding-bottom: ${padBottom}px`);
+                if (padLeft > 0) bodyMargins.push(`padding-left: ${padLeft}px`);
+                if (padRight > 0) bodyMargins.push(`padding-right: ${padRight}px`);
+                
+                if (bodyMargins.length > 0) {
+                    freezeCSS += `
+                    body {
+                        ${bodyMargins.join(' !important;\n                        ')} !important;
+                    }\n`;
+                }
+            } else {
+                // URL 방식: Notion 레이아웃에 padding-top만 적용 (좌우 여백은 PDF 페이지 크기로 처리)
+                if (padTop > 0) {
+                    freezeCSS += `
                     .layout > .layout-content:nth-child(${padTopIdx}) {
                         padding-top: ${padTop}px !important;
                     }\n`;
+                }
             }
             
             const styleTag = document.createElement('style');
@@ -1743,7 +1843,10 @@ class PdfService {
             await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, waitTime)));
 
             // 최종 높이 재계산
-            const selectors = ['.notion-page-content', '.layout'];
+            const selectors = cachedWidth 
+                ? ['body', 'html', 'main', '.content'] // 캐시 HTML: 일반적인 요소
+                : ['.notion-page-content', '.layout']; // URL 방식: Notion 특화 요소
+            
             let contentHeight = 0;
             for (const selector of selectors) {
                 const el = document.querySelector(selector);
@@ -1758,6 +1861,48 @@ class PdfService {
             // padding 정보를 window 객체에 저장 (_reapplyFreezeCSS에서 사용)
             window._snPdfPadTop = padTop;
             window._snPdfPadTopIdx = padTopIdx;
+            window._snPdfPadBottom = padBottom;
+            window._snPdfPadLeft = padLeft;
+            window._snPdfPadRight = padRight;
+            window._snPdfIsCached = !!cachedWidth;
+            
+            // 🔍 디버그 정보 수집
+            const debugInfo = {
+                isCached: !!cachedWidth,
+                hasBody: !!document.body,
+                bodyChildrenCount: document.body ? document.body.children.length : 0,
+                hasNotionPageContent: !!document.querySelector('.notion-page-content'),
+                hasLayout: !!document.querySelector('.layout'),
+                hasMain: !!document.querySelector('main'),
+                topLevelContainer: null,
+                bodyMetrics: null,
+                cssApplied: {
+                    body: padTop > 0 || padBottom > 0 || padLeft > 0 || padRight > 0
+                }
+            };
+            
+            const topLevelContainer = document.querySelector('main, [role="main"], .main-content, body > div:first-child');
+            if (topLevelContainer) {
+                const rect = topLevelContainer.getBoundingClientRect();
+                debugInfo.topLevelContainer = {
+                    element: topLevelContainer.className || topLevelContainer.tagName,
+                    width: Math.ceil(rect.width),
+                    height: Math.ceil(rect.height)
+                };
+            }
+            
+            // body 높이 측정
+            if (document.body) {
+                const bodyRect = document.body.getBoundingClientRect();
+                debugInfo.bodyMetrics = {
+                    width: Math.ceil(bodyRect.width),
+                    height: Math.ceil(bodyRect.height),
+                    scrollHeight: document.body.scrollHeight,
+                    clientHeight: document.body.clientHeight,
+                    offsetHeight: document.body.offsetHeight,
+                    computedHeight: window.getComputedStyle(document.body).height
+                };
+            }
             
             return {
                 height: Math.ceil(contentHeight),
@@ -1766,11 +1911,38 @@ class PdfService {
                 padBottom: padBottom,
                 padLeft: padLeft,
                 padRight: padRight,
-                scale: scale
+                scale: scale,
+                isCached: !!cachedWidth,  // 캐시 방식 여부
+                debugInfo: debugInfo
             };
-        }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth });
+        }, { includeBanner, includeTitle, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth, cachedWidth });
 
-        logger.info(`Calculated dimensions - Detected Width: ${dimensions.width}px, Scale: ${dimensions.scale}, Effective Width: ${dimensions.width * dimensions.scale}px`);
+        logger.info(`Calculated dimensions - Width: ${dimensions.width}px, Scale: ${dimensions.scale}`);
+        logger.info(`Calculated padding - Top: ${dimensions.padTop}px, Bottom: ${dimensions.padBottom}px, Left: ${dimensions.padLeft}px, Right: ${dimensions.padRight}px`);
+        
+        // 🔍 디버그 정보 출력
+        if (dimensions.debugInfo) {
+            logger.info(`[Cache HTML Structure]`);
+            logger.info(`  - isCached: ${dimensions.debugInfo.isCached}`);
+            logger.info(`  - hasBody: ${dimensions.debugInfo.hasBody}`);
+            logger.info(`  - bodyChildrenCount: ${dimensions.debugInfo.bodyChildrenCount}`);
+            logger.info(`  - hasNotionPageContent: ${dimensions.debugInfo.hasNotionPageContent}`);
+            logger.info(`  - hasLayout: ${dimensions.debugInfo.hasLayout}`);
+            logger.info(`  - hasMain: ${dimensions.debugInfo.hasMain}`);
+            if (dimensions.debugInfo.topLevelContainer) {
+                logger.info(`  - topLevelContainer: ${dimensions.debugInfo.topLevelContainer.element} (${dimensions.debugInfo.topLevelContainer.width}x${dimensions.debugInfo.topLevelContainer.height})`);
+            }
+            if (dimensions.debugInfo.bodyMetrics) {
+                logger.info(`  - body metrics:`);
+                logger.info(`    - getBoundingClientRect: ${dimensions.debugInfo.bodyMetrics.width}x${dimensions.debugInfo.bodyMetrics.height}`);
+                logger.info(`    - scrollHeight: ${dimensions.debugInfo.bodyMetrics.scrollHeight}`);
+                logger.info(`    - clientHeight: ${dimensions.debugInfo.bodyMetrics.clientHeight}`);
+                logger.info(`    - offsetHeight: ${dimensions.debugInfo.bodyMetrics.offsetHeight}`);
+                logger.info(`    - computedHeight: ${dimensions.debugInfo.bodyMetrics.computedHeight}`);
+            }
+            logger.info(`  - cssApplied.body: ${dimensions.debugInfo.cssApplied.body}`);
+        }
+        
         return dimensions;
     }
 
@@ -1849,7 +2021,12 @@ class PdfService {
      */
     async _adjustFinalViewport(page, dimensions) {
         const finalHeight = Math.ceil(dimensions.height) + 100;
+        
+        // ✅ 두 방식 모두 좌우 여백을 PDF 페이지 크기에 포함
+        // - URL 방식: viewport 확장 시 콘텐츠도 동적 확장
+        // - 캐시 방식: HTML은 고정되지만 CSS padding으로 여백 생성, PDF 크기는 포함
         const finalWidth = Math.ceil(dimensions.width + dimensions.padLeft + dimensions.padRight);
+        logger.info(`PDF width = content width + left/right padding: ${finalWidth}px`);
         
         // ✅ Notion의 반응형 레이아웃 유지를 위해 큰 viewport 유지
         // Notion은 일정 뷰포트 이상에서 콘텐츠 크기가 고정되므로 필요
@@ -1894,7 +2071,6 @@ class PdfService {
             const oldStyle = document.getElementById('sn-pdf-freeze-style');
             if (oldStyle) {
                 oldStyle.remove();
-                console.log('[ReapplyCSS] Removed old freeze style');
             }
 
             // 새로운 freeze CSS 생성
@@ -1916,15 +2092,36 @@ class PdfService {
                     }\n`;
             });
 
-            // padding-top CSS 추가
-            // 저장된 padTop 값이 있으면 추가 (데이터 속성 사용)
-            const savedPadTop = window._snPdfPadTop;
-            const savedPadTopIdx = window._snPdfPadTopIdx;
-            if (savedPadTop > 0 && savedPadTopIdx) {
-                newFreezeCSS += `
-                    .layout > .layout-content:nth-child(${savedPadTopIdx}) {
-                        padding-top: ${savedPadTop}px !important;
+            // ✅ 저장된 padding 정보로 body CSS 재생성 (캐시 방식)
+            const isCached = window._snPdfIsCached;
+            const padTop = window._snPdfPadTop || 0;
+            const padBottom = window._snPdfPadBottom || 0;
+            const padLeft = window._snPdfPadLeft || 0;
+            const padRight = window._snPdfPadRight || 0;
+            
+            if (isCached) {
+                // 캐시 데이터: body에 모든 여백 CSS 재적용
+                const bodyMargins = [];
+                if (padTop > 0) bodyMargins.push(`padding-top: ${padTop}px`);
+                if (padBottom > 0) bodyMargins.push(`padding-bottom: ${padBottom}px`);
+                if (padLeft > 0) bodyMargins.push(`padding-left: ${padLeft}px`);
+                if (padRight > 0) bodyMargins.push(`padding-right: ${padRight}px`);
+                
+                if (bodyMargins.length > 0) {
+                    newFreezeCSS += `
+                    body {
+                        ${bodyMargins.join(' !important;\n                        ')} !important;
                     }\n`;
+                }
+            } else {
+                // URL 방식: padding-top CSS 추가
+                const savedPadTopIdx = window._snPdfPadTopIdx;
+                if (padTop > 0 && savedPadTopIdx) {
+                    newFreezeCSS += `
+                    .layout > .layout-content:nth-child(${savedPadTopIdx}) {
+                        padding-top: ${padTop}px !important;
+                    }\n`;
+                }
             }
 
             // 새로운 style 태그 생성 및 적용
@@ -1932,8 +2129,6 @@ class PdfService {
             newStyleTag.id = 'sn-pdf-freeze-style';
             newStyleTag.innerHTML = newFreezeCSS;
             document.head.appendChild(newStyleTag);
-            
-            console.log(`[ReapplyCSS] Applied new freeze CSS for ${layoutElements.length} elements`);
         });
     }
 

@@ -40,6 +40,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - NODE_ENV=production
+      - SERVER_URL=http://fastapi-app:3000
     volumes:
       - ./public/downloads:/usr/src/public/downloads
     networks:      
