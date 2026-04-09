@@ -614,30 +614,40 @@ router.get('/render-cache/:sessionId', async (req, res) => {
 
         logger.info(`[Render-Cache] Retrieved session: sessionId=${sessionId}, htmlLength=${html.length}`);
 
-        // ✅ [FIXED] 단일 변환으로 통일 (standard-edit과 동일한 프로세스)
-        // render-cache는 이미 캐시된 HTML을 서빙하므로, 
-        // 상대 경로는 이미 절대 경로이거나 상대 경로로 유지됨
-        // 따라서 convertAll() 제거 후 convertAllToProxyAsset() 만 사용하여
-        // standard-edit과 동일한 CSS 로드 동작 보장
         const baseUrl = sessionData.metadata?.baseUrl || sessionData.metadata?.url;
-        if (html && baseUrl) {
-            logger.debug(`[Render-Cache] Converting URLs to proxy-asset (single pass) with baseUrl: ${baseUrl}`);
-            html = URLPathConverter.convertAllToProxyAsset(html, baseUrl);
-            logger.debug(`[Render-Cache] Proxy-asset conversion completed`);
-        }
+        let processedHtml = html;
+        
+        // [Step 1] 불필요한 추적 스크립트 필터링 (선택사항, 성능 개선)
+        // <script src="...analytics..."></script> 패턴만 제거 (인라인 스크립트는 유지)
+        processedHtml = processedHtml.replace(
+            /<script\s+[^>]*src=['"](https?:\/\/[^'"]*(?:analytics|tracking|doubleclick|google-analytics)[^'"]*)['"]\s*(?:>\s*<\/script>)?/gi,
+            '<!-- tracking script removed -->'
+        );
 
-        // [Step 2] HTML 헤드에 <base href> 태그 삽입
-        // 이는 Puppeteer 렌더링 시 상대 경로 리소스 로드의 fallback 역할
-        if (baseUrl && html) {
+        // [Step 1.5] ✅ CSS url() 경로를 proxy-asset으로 변환 (CRITICAL!)
+        // 이유:
+        //   1. Extension에서 캡처한 CSS는 원본 그대로 (url() 경로 변환 X)
+        //   2. <base href>만으로는 CSS url() 내부의 상대 경로를 처리하지 못함
+        //   3. 배경 이미지, 마스크, 아이콘 등이 로드되지 않음
+        //   4. 캐시 vs URL 렌더링의 스타일 차이 발생
+        if (baseUrl) {
+            const convertStartTime = Date.now();
+            processedHtml = URLPathConverter.convertAllToProxyAsset(processedHtml, baseUrl);
+            const convertDuration = Date.now() - convertStartTime;
+            logger.info(`[Render-Cache] CSS url() paths converted to proxy-asset (${convertDuration}ms)`);
+        }
+        
+        // [Step 2] Base 태그 추가 (상대 경로 처리용 폴백)
+        if (baseUrl && processedHtml) {
             const baseTag = `<base href="${baseUrl}">`;
             // <head> 태그의 가장 처음 자식 위치에 base 태그 삽입
-            html = html.replace(/<head[^>]*>/i, (match) => {
+            processedHtml = processedHtml.replace(/<head[^>]*>/i, (match) => {
                 return match + '\n' + baseTag;
             });
             
             // <head> 태그가 없으면 <html> 바로 뒤에 <head> 생성
-            if (!/<head[^>]*>/i.test(html)) {
-                html = html.replace(/<html[^>]*>/i, (match) => {
+            if (!/<head[^>]*>/i.test(processedHtml)) {
+                processedHtml = processedHtml.replace(/<html[^>]*>/i, (match) => {
                     return match + '\n<head>\n' + baseTag + '\n</head>';
                 });
             }
@@ -646,9 +656,9 @@ router.get('/render-cache/:sessionId', async (req, res) => {
         }
 
         // [Step 3] HTML을 puppeteer에서 로드 가능한 형태로 반환
-        res.type('text/html').set('Cache-Control', 'no-cache, no-store, must-revalidate').send(html);
+        res.type('text/html').set('Cache-Control', 'no-cache, no-store, must-revalidate').send(processedHtml);
 
-        logger.info(`[Render-Cache] Successfully returned cached HTML: sessionId=${sessionId}`);
+        logger.info(`[Render-Cache] Successfully returned cached HTML with proxy-asset conversion: sessionId=${sessionId}`);
 
     } catch (err) {
         logger.error(`Failed to render cached session: ${err.message}`, { stack: err.stack });

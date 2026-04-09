@@ -1591,8 +1591,8 @@ class PdfService {
         const dimensions = await page.evaluate(async (opts) => {
             const { includeTitle, includeBanner, includeTags, includeDiscussion, marginTop, marginBottom, marginLeft, marginRight, pageWidth, cachedWidth } = opts;
 
-            // A. 너비 우선순위: pageWidth(사용자 설정) > cachedWidth(캐시) > detectedWidth(감지) > 1080(기본값)
-            let detectedWidth = 1080; // 기본값
+            // A. 너비 우선순위: pageWidth(사용자 설정) > cachedWidth(캐시) > detectedWidth(감지) > 810(기본값)
+            let detectedWidth = 810; // 기본값
             
             // 1️⃣ 사용자가 pageWidth를 명시적으로 지정했으면 그것을 우선 사용
             if (pageWidth && pageWidth > 0) {
@@ -1610,14 +1610,14 @@ class PdfService {
                 }
             }
 
-            // ✅ Scale 계산: 기본 너비는 이제 detectedWidth와 동일
-            const effectivePageWidth = detectedWidth;
-            const scale = effectivePageWidth / detectedWidth;
+            // ✅ Scale 계산: 기본 너비는 이제 detectedWidth와 동일 (스케일링 제거 - 1.0 고정)
+            const scale = 1.0;  // 더 이상 스케일링하지 않음
             
-            const padTop = (Number(marginTop) || 0) / scale;
-            const padBottom = (Number(marginBottom) || 0) / scale;
-            const padLeft = (Number(marginLeft) || 0) / scale;
-            const padRight = (Number(marginRight) || 0) / scale;
+            // ✅ 여백 계산 (스케일 적용)
+            const padTop = Number(marginTop) || 0;
+            const padBottom = Number(marginBottom) || 0;
+            const padLeft = Number(marginLeft) || 0;
+            const padRight = Number(marginRight) || 0;
 
             // ✅ KaTeX CSS 명시적 로드
             const loadKaTeXCSS = async () => {
@@ -1785,17 +1785,41 @@ class PdfService {
             // padding 적용
             // ✅ 캐시 방식과 URL 방식을 구분하여 처리
             if (cachedWidth) {
-                // 캐시 데이터: body에 모든 여백 적용 (CSS padding으로 처리)
-                const bodyMargins = [];
-                if (padTop > 0) bodyMargins.push(`padding-top: ${padTop}px`);
-                if (padBottom > 0) bodyMargins.push(`padding-bottom: ${padBottom}px`);
-                if (padLeft > 0) bodyMargins.push(`padding-left: ${padLeft}px`);
-                if (padRight > 0) bodyMargins.push(`padding-right: ${padRight}px`);
+                // 캐시 데이터: .notion-page-content에 여백 적용
+                // (body padding 대신 content element에 margin을 적용하면 더 안정적)
+                const contentMargins = [];
+                if (padTop > 0) contentMargins.push(`margin-top: ${padTop}px`);
+                if (padBottom > 0) contentMargins.push(`margin-bottom: ${padBottom}px`);
+                if (padLeft > 0) contentMargins.push(`margin-left: ${padLeft}px`);
+                if (padRight > 0) contentMargins.push(`margin-right: ${padRight}px`);
                 
-                if (bodyMargins.length > 0) {
+                if (contentMargins.length > 0) {
                     freezeCSS += `
-                    body {
-                        ${bodyMargins.join(' !important;\n                        ')} !important;
+                    .notion-page-content {
+                        ${contentMargins.join(' !important;\n                        ')} !important;
+                    }\n`;
+                }
+                
+                // ✅ 콘텐츠 및 자식 요소들의 모든 상단 여백 제거
+                // 블록 요소(h1, p, div, etc)의 기본 margin-top과 padding-top이 누적되는 것을 방지
+                freezeCSS += `
+                body > *:first-child,
+                .notion-page-content > *:first-child,
+                .notion-page-content > * > *:first-child {
+                    margin-top: 0 !important;
+                    padding-top: 0 !important;
+                }\n`;
+                
+                // ✅ [CRITICAL] 여백이 콘텐츠를 누르지 않도록 콘텐츠 너비 제약
+                // 여백이 적용되면 콘텐츠 컨테이너 너비를 조정하여 텍스트 줄바꿈이 변하지 않도록 함
+                const contentMaxWidth = detectedWidth - padLeft - padRight;
+                if (contentMaxWidth > 0 && (padLeft > 0 || padRight > 0)) {
+                    // 이미 margin을 적용했으므로 body의 padding은 적용하지 않음
+                    // width 제약만 적용
+                    freezeCSS += `
+                    .notion-page-content {
+                        max-width: ${contentMaxWidth}px !important;
+                        width: 100% !important;
                     }\n`;
                 }
             } else {
@@ -1902,6 +1926,29 @@ class PdfService {
                     offsetHeight: document.body.offsetHeight,
                     computedHeight: window.getComputedStyle(document.body).height
                 };
+                
+                // ✅ 첫 자식 요소의 margin 로깅 (상단 여백 디버깅)
+                const firstChild = document.body.firstElementChild;
+                if (firstChild) {
+                    const firstChildStyle = window.getComputedStyle(firstChild);
+                    debugInfo.firstChildMargin = {
+                        marginTop: firstChildStyle.marginTop,
+                        paddingTop: firstChildStyle.paddingTop,
+                        tag: firstChild.tagName
+                    };
+                }
+                
+                // ✅ .notion-page-content의 첫 자식 요소 margin 로깅
+                const notionContent = document.querySelector('.notion-page-content');
+                if (notionContent && notionContent.firstElementChild) {
+                    const contentFirstChild = notionContent.firstElementChild;
+                    const contentFirstChildStyle = window.getComputedStyle(contentFirstChild);
+                    debugInfo.notionContentFirstChildMargin = {
+                        marginTop: contentFirstChildStyle.marginTop,
+                        paddingTop: contentFirstChildStyle.paddingTop,
+                        tag: contentFirstChild.tagName
+                    };
+                }
             }
             
             return {

@@ -48,12 +48,12 @@ class StandardEditApp {
             if (this.formatSelect) {
                 this.formatSelect.value = this.format;
                 // Extension에서 들어온 경우 SINGLE 포맷 옵션 비활성화
-                if (this.source === 'extension') {
-                    const singleOption = Array.from(this.formatSelect.options).find(opt => opt.value === 'SINGLE');
-                    if (singleOption) {
-                        singleOption.disabled = true;
-                    }
-                }
+                // if (this.source === 'extension') {
+                //     const singleOption = Array.from(this.formatSelect.options).find(opt => opt.value === 'SINGLE');
+                //     if (singleOption) {
+                //         singleOption.disabled = true;
+                //     }
+                // }
             }
 
             const params = new URLSearchParams(window.location.search);

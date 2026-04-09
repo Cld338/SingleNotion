@@ -148,6 +148,24 @@ class CSSTemplates {
      */
     static get BASE_LAYOUT_CSS() {
         return `
+            /* ✅ 기본 브라우저 여백 제거 (상단 의도치 않은 여백 방지) */
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            
+            /* ✅ Notion wrapper 요소들의 여백도 명시적으로 제거 */
+            .notion-app,
+            .notion-app-inner,
+            .notion-page,
+            .notion-page-content,
+            .notion-scroller,
+            .notion-selectable-container,
+            .layout {
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            
             .notion-sidebar-container, 
             .notion-topbar, 
             .notion-topbar-mobile,
